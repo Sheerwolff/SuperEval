@@ -7,8 +7,7 @@ from lib import base_layout, ink, mode, series, setup
 
 setup("Price explorer", "🧺")
 st.markdown("## 🧺 Price explorer")
-st.caption("The data the agent works from: today's prices from 8 chains, as published under the Israeli "
-           "Price Transparency law. Search in Hebrew or English.")
+st.caption("A deterministic lookup tool for validating results.")
 
 cat = get_catalog()
 
