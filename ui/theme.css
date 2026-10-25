@@ -1,0 +1,56 @@
+:root {
+  --pw-surface: #fcfcfb;
+  --pw-page: #f9f9f7;
+  --pw-ink: #0b0b0b;
+  --pw-ink-2: #52514e;
+  --pw-muted: #898781;
+  --pw-border: rgba(11, 11, 11, 0.10);
+  --pw-good: #0ca30c;
+  --pw-good-text: #006300;
+  --pw-critical: #d03b3b;
+  --pw-v1: #2a78d6;
+  --pw-v2: #eb6834;
+}
+
+.block-container { padding-top: 2rem; max-width: 1280px; }
+h1, h2, h3 { letter-spacing: -0.01em; }
+
+.hero h1 { font-size: 2.2rem; margin-bottom: 0.25rem; }
+.hero p { color: var(--pw-ink-2); font-size: 1.05rem; max-width: 760px; }
+
+.tile {
+  background: var(--pw-surface);
+  border: 1px solid var(--pw-border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  height: 100%;
+}
+.tile .label { color: var(--pw-ink-2); font-size: 0.82rem; }
+.tile .value { color: var(--pw-ink); font-size: 1.7rem; font-weight: 600; line-height: 1.2; margin-top: 2px; }
+.tile .sub { color: var(--pw-muted); font-size: 0.78rem; margin-top: 2px; }
+.tile.bad { border-color: rgba(208, 59, 59, 0.45); }
+.tile.bad .value { color: var(--pw-critical); }
+
+.pill { border-radius: 999px; padding: 1px 9px; font-size: 0.8rem; font-weight: 600; color: white; }
+.pill-v1 { background: var(--pw-v1); }
+.pill-v2 { background: var(--pw-v2); }
+
+.chip {
+  display: inline-block; border-radius: 6px; padding: 1px 7px; margin: 2px 2px 0 0;
+  font-size: 0.76rem; border: 1px solid var(--pw-border); background: var(--pw-surface);
+}
+.chip-ok { color: var(--pw-good-text); }
+.chip-bad { color: var(--pw-critical); border-color: rgba(208, 59, 59, 0.4); font-weight: 600; }
+
+.alert-row {
+  border: 1px solid var(--pw-border); border-left-width: 4px; border-radius: 8px;
+  padding: 8px 12px; margin-bottom: 8px; background: var(--pw-surface);
+}
+.alert-row .meta { color: var(--pw-muted); font-size: 0.78rem; }
+.alert-critical { border-left-color: #d03b3b; }
+.alert-warn { border-left-color: #ec835a; }
+.alert-info { border-left-color: #fab219; }
+.alert-resolved { opacity: 0.62; }
+
+.rtl { direction: rtl; text-align: right; }
+.muted { color: var(--pw-muted); }

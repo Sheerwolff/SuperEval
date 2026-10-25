@@ -1,0 +1,10 @@
+services:
+  app:
+    build: .
+    ports:
+      - "7860:7860"
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - ./data:/app/data

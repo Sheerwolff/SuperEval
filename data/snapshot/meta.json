@@ -1,0 +1,62 @@
+{
+  "fetched_at": "2026-10-25T09:15:34+00:00",
+  "chains": {
+    "Shufersal": {
+      "ok": true,
+      "stores_total": 416,
+      "stores_missing_city_field": 192,
+      "stores_selected": 16,
+      "price_rows_raw": 112618,
+      "price_files": 16,
+      "published_at": "2026-10-25T01:31",
+      "price_rows": 43267,
+      "latest_price_update": "2026-10-23T10:56:00"
+    },
+    "Rami Levy": {
+      "ok": true,
+      "stores_total": 99,
+      "stores_missing_city_field": 46,
+      "stores_selected": 15,
+      "price_rows_raw": 434341,
+      "price_files": 37,
+      "published_at": "2026-10-25T04:00",
+      "price_rows": 122244,
+      "latest_price_update": "2026-10-23T12:03:15.000"
+    },
+    "Victory": {
+      "ok": true,
+      "stores_total": 70,
+      "stores_missing_city_field": 40,
+      "stores_selected": 10,
+      "price_rows_raw": 80516,
+      "price_files": 10,
+      "published_at": "2026-10-25T03:08",
+      "price_rows": 31216,
+      "latest_price_update": "2026-10-23T11:26:27.000"
+    },
+    "Yohananof": {
+      "ok": true,
+      "stores_total": 51,
+      "stores_missing_city_field": 51,
+      "stores_selected": 10,
+      "price_rows_raw": 110667,
+      "price_files": 10,
+      "published_at": "2026-10-24T21:40",
+      "price_rows": 37077,
+      "latest_price_update": "2026-10-22T11:46:00"
+    }
+  },
+  "cities": [
+    "Tel Aviv",
+    "Jerusalem",
+    "Haifa",
+    "Beer Sheva",
+    "Rishon LeZion",
+    "Ashdod",
+    "Netanya",
+    "Petah Tikva"
+  ],
+  "n_products": 4000,
+  "n_prices": 233804,
+  "n_promos": 81032
+}
