@@ -11,5 +11,9 @@ python -m app.data.fetch_snapshot || true
 python -c "from app.db import init_db, SessionLocal, Trace; init_db(); s=SessionLocal(); exit(0 if s.query(Trace).count() else 1)" \
   || python -m app.traffic.backfill --days 30
 
+# first boot: load the committed golden set into the review queue (never overwrites reviewed items)
+python -c "from app.db import init_db, SessionLocal, GoldenItem; init_db(); s=SessionLocal(); exit(0 if s.query(GoldenItem).count() else 1)" \
+  || python -m app.evals.golden import
+
 uvicorn app.api.main:app --host 127.0.0.1 --port 8000 &
 exec python -m streamlit run ui/Home.py --server.port "$PORT" --server.address 0.0.0.0
