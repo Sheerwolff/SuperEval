@@ -66,7 +66,7 @@ MACROS = [
     SELECT p.chain, COUNT(*) AS n_products, ROUND(MEDIAN(p.price / s.med), 4) AS "index",
            ROUND(100 * (MEDIAN(p.price / s.med) - 1), 1) AS pct_vs_median
     FROM p JOIN shared s USING (item_code)
-    GROUP BY p.chain ORDER BY "index\"""",
+    GROUP BY p.chain ORDER BY "index", p.chain""",
     """CREATE MACRO price_spread(c, cat) AS TABLE
     WITH p AS (
         SELECT pr.chain, pr.item_code, MIN(pr.price) AS price
@@ -77,14 +77,14 @@ MACROS = [
            ARG_MIN(p.chain, p.price) AS cheapest_chain, ARG_MAX(p.chain, p.price) AS priciest_chain,
            ROUND(100 * (MAX(p.price) / MIN(p.price) - 1), 1) AS spread_pct
     FROM p JOIN products pd USING (item_code)
-    GROUP BY p.item_code, pd.name_en HAVING COUNT(*) >= 2 ORDER BY spread_pct DESC""",
+    GROUP BY p.item_code, pd.name_en HAVING COUNT(*) >= 2 ORDER BY spread_pct DESC, p.item_code""",
     """CREATE MACRO promo_share(c) AS TABLE
     WITH sold AS (SELECT DISTINCT chain, item_code FROM prices WHERE c IS NULL OR city = c),
     promo AS (SELECT DISTINCT chain, item_code FROM promos WHERE c IS NULL OR city = c)
     SELECT s.chain, COUNT(*) AS n_products, COUNT(pm.item_code) AS n_on_promo,
            ROUND(COUNT(pm.item_code) / COUNT(*), 4) AS promo_share
     FROM sold s LEFT JOIN promo pm USING (chain, item_code)
-    GROUP BY s.chain ORDER BY promo_share DESC""",
+    GROUP BY s.chain ORDER BY promo_share DESC, s.chain""",
 ]
 
 
@@ -131,6 +131,9 @@ class Semantic:
         promos_path = snap / "promos.parquet"
         promos = pd.read_parquet(promos_path) if promos_path.exists() else pd.DataFrame()
         if not promos.empty:
+            # same gift/coupon filter as the ingest, for snapshots taken before it existed
+            gift = promos.description.fillna("").str.contains("קופון|מתנה|coupon|gift", case=False)
+            promos = promos[~gift & ~(promos.discounted_price.fillna(99) < 1)]
             promos = promos.merge(stores[["chain", "store_id", "city"]], on=["chain", "store_id"])
             promos = promos.assign(ends=promos.end.astype(str).str[:10])[
                 ["chain", "store_id", "city", "item_code", "description", "discounted_price", "min_qty", "ends",

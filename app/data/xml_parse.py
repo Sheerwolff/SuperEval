@@ -129,7 +129,10 @@ def parse_promos(path: Path, chain: str) -> list[dict]:
         items = list(promo.iter("promotionitem")) or list(promo.iter("item"))
         first = items[0] if items else promo
         discounted = _num(_txt(first, "discountedprice") or _txt(promo, "discountedprice"))
-        if discounted is not None and discounted <= 0:
+        # gifts and coupons ("קופון ... מתנה", ₪0.01-0.20) aren't prices, even when the coupon flag is unset
+        if discounted is not None and discounted < 1:
+            continue
+        if re.search(r"קופון|מתנה|coupon|gift", _txt(promo, "promotiondescription") or "", re.I):
             continue
         club = _txt(promo, "clubid") or "0"
         rows.append({

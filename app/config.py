@@ -16,14 +16,14 @@ ROOT = Path(__file__).resolve().parent.parent
 class Settings:
     openai_api_key: str | None = os.getenv("OPENAI_API_KEY") or None
     agent_model: str = os.getenv("AGENT_MODEL", "gpt-5-mini")
-    judge_model: str = os.getenv("JUDGE_MODEL", "gpt-5-mini")
+    judge_model: str = os.getenv("JUDGE_MODEL", "gpt-5")  # stronger than the agent (decision)
     database_url: str = os.getenv("DATABASE_URL", f"sqlite:///{ROOT / 'data' / 'pricewatch.db'}")
     # the full snapshot (downloaded by app.data.fetch_snapshot) if present, else the committed sample
     snapshot_dir: Path = Path(os.getenv("SNAPSHOT_DIR") or (
         ROOT / "data" / "snapshot" if (ROOT / "data" / "snapshot" / "meta.json").exists() else ROOT / "data" / "sample"))
     daily_budget_usd: float = float(os.getenv("DAILY_BUDGET_USD", "2.0"))
     rate_limit_per_hour: int = int(os.getenv("RATE_LIMIT_PER_HOUR", "30"))
-    judge_sample_rate: float = float(os.getenv("JUDGE_SAMPLE_RATE", "1.0"))
+    judge_sample_rate: float = float(os.getenv("JUDGE_SAMPLE_RATE", "0.3"))
     alert_webhook_url: str | None = os.getenv("ALERT_WEBHOOK_URL") or None
     api_url: str = os.getenv("API_URL", "http://127.0.0.1:8000")
     freshness_sla_hours: float = float(os.getenv("FRESHNESS_SLA_HOURS", "36"))
@@ -32,6 +32,8 @@ class Settings:
     contact_email: str = os.getenv("CONTACT_EMAIL", "sheerwolff@gmail.com")
     contact_linkedin: str = os.getenv("CONTACT_LINKEDIN", "https://www.linkedin.com/in/sheerwolff")
     contact_whatsapp: str | None = os.getenv("CONTACT_WHATSAPP") or None
+    # unlocks the owner role on the Review and Golden Set pages (approving references, owner judgments)
+    admin_key: str | None = os.getenv("ADMIN_KEY") or None
 
     @property
     def live_llm(self) -> bool:

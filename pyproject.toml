@@ -11,4 +11,4 @@ select = ["E", "F", "I", "B", "UP"]
 ignore = ["E402", "B008", "E501", "B905"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["app", "lib", "components"]
+known-first-party = ["app", "lib", "components", "render"]

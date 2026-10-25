@@ -21,8 +21,10 @@ from sqlalchemy import func, select
 
 from app.db import EvalResult, JudgeCanaryResult, SessionLocal, Trace
 
-TRUTH_EVALS = ("price_accuracy", "grounded_prices", "no_uncovered_chains")
-JUDGE_EVALS = ("judge_groundedness", "judge_helpfulness", "judge_relevance", "judge_error", "judge_repeat")
+# deterministic Layer-1 verdicts that *know* an answer is bad: free, always-on labels for the judge
+TRUTH_EVALS = ("grounding", "method_lint", "canonical_check")
+JUDGE_EVALS = ("judge_groundedness", "judge_method", "judge_helpfulness", "judge_caveats", "judge_error",
+               "judge_repeat")
 JUDGE_COLUMNS = ["trace_id", "created_at", "agent_version", "language", "answer_len", "judge_model",
                  "rubric_hash", "ground_pass", "help_raw", "relevance_pass", "judge_latency_ms", "error",
                  "truth_bad", "repeat_pass"]
@@ -51,7 +53,11 @@ def judge_frame_from(evals: pd.DataFrame, traces: pd.DataFrame) -> pd.DataFrame:
     base["rubric_hash"] = details.map(lambda d: d.get("rubric_hash"))
     base["judge_latency_ms"] = details.map(lambda d: d.get("latency_ms"))
     base["help_raw"] = pick("judge_helpfulness", "details").map(lambda d: (d or {}).get("raw"))
-    base["ground_pass"] = pick("judge_groundedness")
+    # the judge "passes" an answer when it finds it both grounded and methodologically sound
+    g, m = pick("judge_groundedness"), pick("judge_method")
+    both = pd.concat([g.rename("g"), m.rename("m")], axis=1).reindex(base.index)
+    base["ground_pass"] = both.apply(lambda r: None if pd.isna(r.g) else bool(r.g) and (pd.isna(r.m) or bool(r.m)),
+                                     axis=1)
     base["relevance_pass"] = pick("judge_relevance")
     base["error"] = base.index.isin(j[j.evaluator == "judge_error"].trace_id)
     base["repeat_pass"] = pick("judge_repeat")

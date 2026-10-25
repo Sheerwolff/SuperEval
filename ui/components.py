@@ -47,8 +47,7 @@ def _links() -> list[tuple[str, str, str]]:
 
 
 def connect_card(headline: str = "Let's connect", body: str | None = None) -> None:
-    body = body or ("I build and monitor LLM systems in production: evals, judges, and the data underneath. "
-                    "If this is the kind of work your team needs, I'd love to talk.")
+    body = body or "Data Analyst at MedOrion. Mentor and Speaker. I build business-driven eval frameworks."
     buttons = "".join(
         f"<a class='connect-btn connect-{key}' href='{url}' target='_blank' rel='noopener' "
         f"aria-label='{label}' title='{label}'>{ICONS[key]}<span>{label}</span></a>"
@@ -134,3 +133,28 @@ def tour_banner(key: str) -> None:
         if c.button("Exit tour", use_container_width=True, key=f"tour_exit_{key}"):
             st.session_state.tour_step = None
             st.rerun()
+
+
+# ---- roles ---------------------------------------------------------------------
+def role() -> str:
+    """'owner' once the admin key was entered this session, else 'visitor'."""
+    return "owner" if st.session_state.get("is_owner") else "visitor"
+
+
+def owner_unlock() -> None:
+    """Small expander to unlock owner actions with ADMIN_KEY (compared server-side, never shown)."""
+    import hmac
+
+    if role() == "owner":
+        st.caption("🔓 Signed in as owner")
+        return
+    with st.expander("🔒 Owner sign-in"):
+        if not settings.admin_key:
+            st.caption("Set ADMIN_KEY in the environment to enable owner actions.")
+            return
+        key = st.text_input("Admin key", type="password", key="admin_key_input")
+        if key and hmac.compare_digest(key, settings.admin_key):
+            st.session_state.is_owner = True
+            st.rerun()
+        elif key:
+            st.error("Wrong key.")

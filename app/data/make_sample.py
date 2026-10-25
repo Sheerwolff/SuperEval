@@ -12,8 +12,8 @@ import pandas as pd
 
 from app.config import ROOT
 
-CITIES = ["Tel Aviv", "Haifa"]
-MAX_PRODUCTS = 1500
+CITIES = ["Tel Aviv", "Haifa", "Jerusalem"]
+MAX_PRODUCTS = 2000
 
 
 def make(src: Path = ROOT / "data" / "snapshot", dst: Path = ROOT / "data" / "sample") -> dict:

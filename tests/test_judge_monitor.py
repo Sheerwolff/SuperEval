@@ -14,7 +14,7 @@ def judged(n_bad: int, judge_catches: float, n_good: int = 100, repeat_flip: flo
     for i in range(n_bad + n_good):
         tid, bad = f"t{i}", i < n_bad
         ts = NOW - timedelta(hours=1, minutes=i % 50)
-        rows.append({"trace_id": tid, "created_at": ts, "evaluator": "price_accuracy", "passed": not bad,
+        rows.append({"trace_id": tid, "created_at": ts, "evaluator": "grounding", "passed": not bad,
                      "details": None})
         caught = bad and (i < round(n_bad * judge_catches))
         ground = not caught

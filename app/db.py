@@ -95,6 +95,49 @@ class Alert(Base):
     layer: Mapped[str] = mapped_column(String(8), default="agent")  # agent (layer 1) | judge (layer 2)
 
 
+class HumanJudgment(Base):
+    """A person's verdict on a trace (Review page). Visitors and the owner are kept apart:
+    owner judgments drive judge calibration and can be promoted into the golden set."""
+
+    __tablename__ = "human_judgments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+    trace_id: Mapped[str] = mapped_column(ForeignKey("traces.id", ondelete="CASCADE"), index=True)
+    role: Mapped[str] = mapped_column(String(8))  # visitor | owner
+    reviewer: Mapped[str | None] = mapped_column(String(64))  # session id, for de-duplication
+    correct: Mapped[str] = mapped_column(String(8))  # yes | no | unsure
+    method_ok: Mapped[bool | None] = mapped_column(Boolean)
+    tags: Mapped[list] = mapped_column(JSON, default=list)  # failure taxonomy
+    corrected_answer: Mapped[str | None] = mapped_column(Text)
+    corrected_sql: Mapped[str | None] = mapped_column(Text)
+    note: Mapped[str | None] = mapped_column(Text)
+    promoted_to: Mapped[str | None] = mapped_column(String(16))  # golden item id
+
+
+class GoldenItem(Base):
+    """One benchmark question. Drafts become CI-gating only once a human approves them
+    (golden-set review queue); items can also be promoted from human-judged traces."""
+
+    __tablename__ = "golden_items"
+
+    id: Mapped[str] = mapped_column(String(16), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+    question: Mapped[str] = mapped_column(Text)
+    language: Mapped[str] = mapped_column(String(4))
+    qtype: Mapped[str] = mapped_column(String(24))  # lookup | comparison | ranking | spread | promo | geo | trap_*
+    difficulty: Mapped[str] = mapped_column(String(8))  # easy | medium | hard
+    answer_type: Mapped[str] = mapped_column(String(12))  # scalar | ranking | set | decline | assumption
+    reference_sql: Mapped[str | None] = mapped_column(Text)
+    answer_key: Mapped[dict] = mapped_column(JSON, default=dict)
+    status: Mapped[str] = mapped_column(String(10), default="draft")  # draft | approved | rejected
+    source: Mapped[str] = mapped_column(String(10), default="drafted")  # drafted | promoted
+    source_trace_id: Mapped[str | None] = mapped_column(String(36))
+    notes: Mapped[str | None] = mapped_column(Text)
+    reviewed_by: Mapped[str | None] = mapped_column(String(16))
+
+
 class JudgeCanaryResult(Base):
     """One canary item judged in one canary run (Layer 2: is the judge still right on known cases?)."""
 

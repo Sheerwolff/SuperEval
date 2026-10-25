@@ -1,7 +1,7 @@
 import streamlit as st
 
 from components import TOUR, connect_card, tour_start
-from lib import fmt, frames, kpis, setup, tiles
+from lib import setup
 
 setup("Home", "🛒")
 
@@ -22,8 +22,7 @@ In about three minutes you saw:
   own regression was invisible to Layer 1 and caught here.
 """
     )
-    connect_card("Let's connect", "Thanks for taking the tour. I'd be glad to walk you through the design "
-                 "decisions, or talk about what you're building.")
+    connect_card()
     a, b = st.columns(2)
     if a.button("Explore on my own", use_container_width=True, type="primary"):
         st.session_state.tour_step = None
@@ -44,53 +43,5 @@ data</b>. Every answer is evaluated in production, and so is the LLM judge doing
 )
 connect_card()
 
-c1, c2 = st.columns([1, 2], vertical_alignment="center")
-if c1.button("▶  Take the 3-minute tour", type="primary", use_container_width=True):
+if st.button("▶  Take the 3-minute tour", type="primary"):
     tour_start()
-c2.caption("Ask the agent → break production → investigate → see who watches the judge. "
-           "Or use the sidebar to explore freely.")
-
-traces, evals = frames(days=1)
-metrics = ["price_accuracy", "grounded_prices", "product_relevance", "language_match", "judge_helpfulness",
-           "latency_p95_ms"]
-vals = kpis(evals, traces, metrics)
-labels = {"price_accuracy": "Price accuracy", "grounded_prices": "Grounded prices",
-          "product_relevance": "Right product", "language_match": "Language match",
-          "judge_helpfulness": "Judge helpfulness", "latency_p95_ms": "Latency p95"}
-st.markdown("##### Last 24 hours")
-tiles([("Requests", f"{len(traces):,}", "all sources", False)]
-      + [(labels[m], fmt(m, vals[m][0]), f"n = {vals[m][1]:,}", False) for m in metrics])
-
-st.write("")
-st.markdown("#### Two layers of evaluation")
-a, b = st.columns(2, gap="large")
-with a:
-    st.markdown("##### Layer 1 · the agent")
-    st.markdown(
-        """
-| Signal | How |
-|---|---|
-| Every quoted ₪ price matches a tool result | deterministic, 100% |
-| No price without a lookup; no chains we don't cover | deterministic |
-| Priced the product that was asked for | deterministic + judge |
-| Right tool, user's language, off-topic/injection declined | deterministic |
-| Helpfulness and groundedness (1–5) | LLM judge |
-| Latency, cost, errors, input drift, data freshness | from traces and ingests |
-"""
-    )
-with b:
-    st.markdown("##### Layer 2 · the judge")
-    st.markdown(
-        """
-| Signal | How |
-|---|---|
-| Fails answers we *know* are bad | recall vs. deterministic ground truth |
-| Still right on known cases | daily canary set |
-| Same verdict when asked twice | flip rate |
-| Agrees with humans | Cohen's κ from labels |
-| Rewards length? favours a language? | bias checks |
-| Errors, latency, cost | judge ops |
-"""
-    )
-st.caption("The 30-day history is seeded by a simulator with five scripted incidents; the 'backfill' source tag "
-           "marks it everywhere. Live chats and synthetic bursts are added on top in real time.")
