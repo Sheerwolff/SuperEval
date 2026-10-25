@@ -42,6 +42,9 @@ class Trace(Base):
     cost_usd: Mapped[float] = mapped_column(Float, default=0.0)
     latency_ms: Mapped[float] = mapped_column(Float, default=0.0)
     error: Mapped[str | None] = mapped_column(Text)
+    analysis: Mapped[dict | None] = mapped_column(JSON)  # analyst's structured answer (app/analyst/answer.py)
+    steps: Mapped[int] = mapped_column(Integer, default=0)
+    canary: Mapped[bool] = mapped_column(Boolean, default=False)  # served by a canary deployment
 
     evals: Mapped[list[EvalResult]] = relationship(back_populates="trace", cascade="all, delete-orphan")
 
@@ -159,4 +162,4 @@ def init_db() -> None:
 
 def current_version(session) -> str:
     dep = session.query(Deployment).order_by(Deployment.created_at.desc(), Deployment.id.desc()).first()
-    return dep.agent_version if dep else "v1"
+    return dep.agent_version if dep else "a1"

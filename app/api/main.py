@@ -16,14 +16,14 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
-from app.agent.versions import load_versions
+from app.analyst.agent import load_versions
+from app.analyst.pipeline import handle_analysis
 from app.api.cost_guard import guard
 from app.config import settings
 from app.data.catalog import get_catalog
 from app.db import Alert, Deployment, HumanLabel, IngestRun, SessionLocal, Trace, current_version, init_db
 from app.jobs import sync_ingest_meta
 from app.monitor.alerts import run_monitors
-from app.pipeline import handle_question
 
 _last_monitor_run = 0.0
 _monitor_lock = threading.Lock()
@@ -85,7 +85,7 @@ def _trace_json(t: Trace, evals=None) -> dict:
         "agent_version": t.agent_version, "model": t.model, "question": t.question, "answer": t.answer,
         "language": t.language, "topic": t.topic, "latency_ms": t.latency_ms, "cost_usd": t.cost_usd,
         "input_tokens": t.input_tokens, "output_tokens": t.output_tokens, "error": t.error,
-        "tool_calls": t.tool_calls,
+        "tool_calls": t.tool_calls, "analysis": t.analysis, "steps": t.steps, "canary": t.canary,
         "evals": [{"evaluator": e.evaluator, "kind": e.kind, "score": e.score, "passed": e.passed,
                    "details": e.details} for e in evals],
     }
@@ -108,8 +108,13 @@ def chat(body: ChatIn, request: Request):
     with SessionLocal() as s:
         version = current_version(s)
     history = [m for m in body.history if m.get("role") in ("user", "assistant")][-6:]
-    trace, evals = handle_question(body.question, version, source="user", session_id=body.session_id,
-                                   history=history, force_sim=(mode == "sim"))
+    if mode == "sim":
+        from app.analyst.sim import sim_analysis
+
+        trace, evals = sim_analysis(body.question, version, session_id=body.session_id)
+    else:
+        trace, evals = handle_analysis(body.question, version, source="user", session_id=body.session_id,
+                                       history=history)
     maybe_run_monitors()
     return {"mode": mode, "mode_reason": reason, **_trace_json(trace, evals)}
 
@@ -127,8 +132,13 @@ def chat_stream(body: ChatIn, request: Request):
 
     def work():
         try:
-            trace, evals = handle_question(body.question, version, source="user", session_id=body.session_id,
-                                           history=history, force_sim=(mode == "sim"), on_event=events.put)
+            if mode == "sim":
+                from app.analyst.sim import sim_analysis  # deterministic stand-in (no key / over budget)
+
+                trace, evals = sim_analysis(body.question, version, session_id=body.session_id, on_event=events.put)
+            else:
+                trace, evals = handle_analysis(body.question, version, source="user", session_id=body.session_id,
+                                               history=history, on_event=events.put)
             events.put({"type": "done", "mode": mode, "mode_reason": reason, **_trace_json(trace, evals)})
         except Exception as exc:  # surface failures to the client instead of hanging the stream
             events.put({"type": "error", "message": f"{type(exc).__name__}: {exc}"})
