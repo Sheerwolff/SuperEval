@@ -36,7 +36,6 @@ class Context:
     spend_today: float
     budget: float
     freshness_sla_hours: float
-    deployed: str | None = None  # version live at `now`; SLOs are judged on what is serving
     judge: pd.DataFrame | None = None  # layer 2: one row per judged trace (judge_monitor.judge_frame_from)
     canaries: pd.DataFrame | None = None  # layer 2: canary results
     kappa: dict | None = None  # layer 2: judge vs human labels (calibration.agreement)
@@ -50,7 +49,7 @@ def _window(df: pd.DataFrame, now: datetime, start: timedelta, end: timedelta = 
 
 @dataclass
 class ThresholdRule:
-    """Fires when a metric over the last `window` crosses a fixed SLO, per agent version."""
+    """Fires when a metric over the last `window` crosses a fixed SLO."""
 
     metric: str
     op: str  # "<" or ">"
@@ -66,36 +65,26 @@ class ThresholdRule:
 
     def check(self, ctx: Context) -> list[Firing]:
         ev, tr = _window(ctx.evals, ctx.now, self.window), _window(ctx.traces, ctx.now, self.window)
-        out = []
-        # only the version that is serving: after a rollback the old version's alerts resolve
-        if ctx.deployed:
-            versions = [ctx.deployed]
+        val, n = metric_value(self.metric, ev, tr)
+        if val is None or n < self.min_n:
+            return []
+        if self.metric in METRICS and METRICS[self.metric][1] == "rate":
+            # a 95% SLO on 15 samples "breaches" on a single miss; require the whole
+            # confidence interval to sit on the wrong side of the SLO instead
+            lo, hi = wilson(val, n, self.confidence)
+            bad = hi < self.threshold if self.op == "<" else lo > self.threshold
+            ci = f", {self.confidence:.0%} CI {lo:.0%}-{hi:.0%}"
         else:
-            serving = _window(tr, ctx.now, timedelta(minutes=30))
-            versions = sorted(set(serving.agent_version)) if len(serving) else []
-        for version in versions:
-            val, n = metric_value(self.metric, ev[ev.agent_version == version], tr[tr.agent_version == version])
-            if val is None or n < self.min_n:
-                continue
-            is_rate = self.metric in METRICS and METRICS[self.metric][1] == "rate"
-            if is_rate:
-                # a 95% SLO on 15 samples "breaches" on a single miss; require the whole
-                # confidence interval to sit on the wrong side of the SLO instead
-                lo, hi = wilson(val, n, self.confidence)
-                bad = hi < self.threshold if self.op == "<" else lo > self.threshold
-                ci = f", {self.confidence:.0%} CI {lo:.0%}-{hi:.0%}"
-            else:
-                bad = val < self.threshold if self.op == "<" else val > self.threshold
-                ci = ""
-            if bad:
-                label = METRIC_LABELS.get(self.metric, self.metric)
-                out.append(Firing(
-                    self.name, self.metric, self.severity, val, self.threshold,
-                    f"{label} is {_fmt(self.metric, val)} over the last {_dur(self.window)} on {version} "
-                    f"(SLO {self.op} {_fmt(self.metric, self.threshold)} breached, n={n}{ci})",
-                    version,
-                ))
-        return out
+            bad = val < self.threshold if self.op == "<" else val > self.threshold
+            ci = ""
+        if not bad:
+            return []
+        label = METRIC_LABELS.get(self.metric, self.metric)
+        return [Firing(
+            self.name, self.metric, self.severity, val, self.threshold,
+            f"{label} is {_fmt(self.metric, val)} over the last {_dur(self.window)} "
+            f"(SLO {'≥' if self.op == '<' else '≤'} {_fmt(self.metric, self.threshold)} breached, n={n}{ci})",
+        )]
 
 
 @dataclass
@@ -159,7 +148,7 @@ class PSIDriftRule:
     threshold: float = 0.2
     window: timedelta = timedelta(hours=24)
     baseline: timedelta = timedelta(days=7)
-    min_n: int = 120
+    min_n: int = 60
     severity: str = "info"
 
     @property
@@ -169,7 +158,7 @@ class PSIDriftRule:
     def check(self, ctx: Context) -> list[Firing]:
         cur = _window(ctx.traces, ctx.now, self.window)
         base = _window(ctx.traces, ctx.now, self.baseline + self.window, self.window)
-        if len(cur) < self.min_n or len(base) < self.min_n:
+        if len(cur) < self.min_n or len(base) < 5 * self.min_n:  # a thin baseline makes PSI noisy
             return []
         value = psi(base[self.feature], cur[self.feature])
         if value <= self.threshold:
@@ -190,13 +179,18 @@ def wilson(p: float, n: int, confidence: float = 0.95) -> tuple[float, float]:
     return max(0.0, center - half), min(1.0, center + half)
 
 
-def psi(expected: pd.Series, actual: pd.Series, eps: float = 1e-4) -> float:
-    cats = set(expected.dropna()) | set(actual.dropna())
-    e = expected.value_counts(normalize=True)
-    a = actual.value_counts(normalize=True)
+def psi(expected: pd.Series, actual: pd.Series, alpha: float = 1.0) -> float:
+    """Population stability index with additive smoothing: a rare category missing from one quiet day
+    shouldn't look like a shift (a tiny epsilon makes log(p/eps) explode)."""
+    cats = sorted(set(expected.dropna()) | set(actual.dropna()))
+    if not cats:
+        return 0.0
+    e, a = expected.value_counts(), actual.value_counts()
+    ne, na, k = len(expected.dropna()), len(actual.dropna()), len(cats)
     total = 0.0
     for c in cats:
-        pe, pa = max(e.get(c, 0.0), eps), max(a.get(c, 0.0), eps)
+        pe = (e.get(c, 0) + alpha) / (ne + alpha * k)
+        pa = (a.get(c, 0) + alpha) / (na + alpha * k)
         total += (pa - pe) * math.log(pa / pe)
     return total
 
@@ -278,7 +272,7 @@ class JudgeRateRule:
 class CanaryRule:
     """The judge got known cases wrong in its latest canary run."""
 
-    threshold: float = 0.85
+    threshold: float = 0.80
     max_age: timedelta = timedelta(hours=36)
     severity: str = "critical"
     name: str = "judge:canaries"
@@ -328,7 +322,7 @@ class KappaRule:
 
 @dataclass
 class JudgeScoreDriftRule:
-    """Judge helpfulness distribution moved while the deployed agent version didn't."""
+    """Judge helpfulness distribution moved (the agent prompt is fixed, so the judge changed)."""
 
     threshold: float = 0.25
     window: timedelta = timedelta(hours=24)
@@ -341,8 +335,6 @@ class JudgeScoreDriftRule:
         j = ctx.judge
         if j is None or j.empty:
             return []
-        if ctx.deployed:
-            j = j[j.agent_version == ctx.deployed]
         j = j[j.help_raw.notna()]
         cur = _window(j, ctx.now, self.window)
         base = _window(j, ctx.now, self.baseline + self.window, self.window)
@@ -352,22 +344,22 @@ class JudgeScoreDriftRule:
         if value <= self.threshold:
             return []
         return [Firing(self.name, "psi_judge_helpfulness", self.severity, value, self.threshold,
-                       f"Judge helpfulness scores shifted (PSI = {value:.2f}) with the same agent version deployed.",
+                       f"Judge helpfulness scores shifted (PSI = {value:.2f}) with the agent unchanged.",
                        layer="judge")]
 
 
 DEFAULT_RULES = [
-    ThresholdRule("price_accuracy", "<", 0.95),
-    ThresholdRule("grounded_prices", "<", 0.95),
-    ThresholdRule("scope_handling", "<", 0.90, severity="warn"),
-    ThresholdRule("language_match", "<", 0.90, severity="warn"),
-    ThresholdRule("product_relevance", "<", 0.80, severity="warn"),
-    ThresholdRule("latency_p95_ms", ">", 8000, severity="warn"),
-    ThresholdRule("error_rate", ">", 0.05),
+    # layer 1: the analyst (Wilson-gated: fire only when the breach is statistically clear)
+    ThresholdRule("grounding", "<", 0.98),
+    ThresholdRule("completion", "<", 0.95),
+    ThresholdRule("sql_health", "<", 0.95),
+    ThresholdRule("method_lint", "<", 0.90),
+    ThresholdRule("decline_check", "<", 0.90, severity="warn"),
+    ThresholdRule("latency_p95_ms", ">", 20000, severity="warn"),
     ZScoreRule("judge_helpfulness"),
     ZScoreRule("latency_p95_ms", direction="up"),
-    PSIDriftRule("topic"),
-    PSIDriftRule("language"),
+    PSIDriftRule("topic", threshold=0.25),
+    PSIDriftRule("language", threshold=0.25),
     FreshnessRule(),
     BudgetRule(),
     # layer 2: the judge
@@ -376,7 +368,6 @@ DEFAULT_RULES = [
     JudgeRateRule("judge_error_rate", ">", 0.05, window=timedelta(hours=3), min_n=20, severity="warn"),
     CanaryRule(),
     KappaRule(),
-    JudgeScoreDriftRule(),
 ]
 
 

@@ -1,9 +1,25 @@
-# Separate light and dark themes, so visitors can switch (one [theme] block = a single fixed custom theme).
+# Separate light and dark themes (one [theme] block = a single fixed theme with no switcher).
+# Colors from the project palette: text = blue scale, background = amber scale, primary = gold,
+# secondary = orange, accent = red. Dark mode uses the mirrored steps of the same scales.
+[theme]
+font = "sans serif"
+baseRadius = "0.6rem"
+
 [theme.light]
-primaryColor = "#2a78d6"
+primaryColor = "#8f720a"            # primary-700 (gold, readable under white button text)
+backgroundColor = "#fff9e5"         # background-50
+secondaryBackgroundColor = "#fff2cc" # background-100
+textColor = "#061a2d"               # text-900
+linkColor = "#1669b6"               # text-600
+borderColor = "#ffe699"             # background-200
 
 [theme.dark]
-primaryColor = "#3987e5"
+primaryColor = "#bf980d"            # primary-400 (dark scale)
+backgroundColor = "#1a1300"         # background-50 (dark scale)
+secondaryBackgroundColor = "#332600" # background-100 (dark scale)
+textColor = "#d2e6f9"               # text-900 (dark scale)
+linkColor = "#77b4ee"               # text-700 (dark scale)
+borderColor = "#664d00"             # background-200 (dark scale)
 
 [server]
 headless = true

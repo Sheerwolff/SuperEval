@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import func, select
 
 from app.config import settings
-from app.db import Alert, Deployment, IngestRun, SessionLocal, Trace, utcnow
+from app.db import Alert, IngestRun, SessionLocal, Trace, utcnow
 from app.evals.calibration import agreement
 from app.evals.judge_monitor import load_canaries, load_judge_frame
 from app.monitor.aggregates import load_evals, load_traces
@@ -38,14 +38,6 @@ def spend_since(session, since: datetime, until: datetime | None = None) -> floa
     return float(session.execute(q).scalar_one())
 
 
-def deployed_as_of(session, now: datetime) -> str | None:
-    dep = session.execute(
-        select(Deployment).where(Deployment.created_at <= now)
-        .order_by(Deployment.created_at.desc(), Deployment.id.desc()).limit(1)
-    ).scalar_one_or_none()
-    return dep.agent_version if dep else None
-
-
 def build_context(session, now: datetime) -> Context:
     since = now - timedelta(days=8)
     day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -57,7 +49,6 @@ def build_context(session, now: datetime) -> Context:
         spend_today=spend_since(session, day_start, now),
         budget=settings.daily_budget_usd,
         freshness_sla_hours=settings.freshness_sla_hours,
-        deployed=deployed_as_of(session, now),
         judge=load_judge_frame(now - timedelta(days=8), now, session=session),
         canaries=load_canaries(now - timedelta(days=2), now, session=session),
         kappa=agreement(),

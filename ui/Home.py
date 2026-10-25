@@ -13,13 +13,14 @@ if wrap:
         """
 In about three minutes you saw:
 
-- **An agent on real data.** Prices from 8 Israeli chains across 25 cities, published daily by law, with messy
-  XML normalized and every product given English names and categories.
-- **Layer 1: evals on the agent.** Every ₪ figure is checked exactly against the database. Grounding, tool use,
-  language, scope and product relevance are checked too, and an LLM judge covers the rest.
-- **A bad deploy caught.** Statistically gated SLOs fired on v2 within seconds and resolved on rollback.
-- **Layer 2: evals on the judge.** Canaries, recall on known-bad answers, flip rate and human κ. The judge's
-  own regression was invisible to Layer 1 and caught here.
+- **An LLM data analyst on real data.** Prices from 8 Israeli chains in 25 cities, published daily by law. It
+  answers with SQL, and every number in its answer is tied to the query it came from.
+- **Layer 1: evals on every answer.** Numbers checked against their query results, SQL linted for misleading
+  methods (like averaging different products per chain), declines and assumptions checked, plus an LLM judge.
+- **Faults caught by the right layer.** A model regression kept every number grounded, and the method checks
+  caught it. A schema break stopped answers, and completion caught it.
+- **Layer 2: evals on the judge.** Canaries with known verdicts, recall on known-bad answers, flip rate and
+  human κ. The judge's own regression was invisible to Layer 1 and caught here.
 """
     )
     connect_card()
@@ -35,7 +36,7 @@ st.markdown(
     """
 <div class="hero">
 <h1>PriceWatch Evals</h1>
-<p>A live LLM agent answers grocery price questions over <b>real, daily-published Israeli supermarket
+<p>A live LLM data-analyst agent answers analytical questions about grocery prices over <b>real, daily-published Israeli supermarket
 data</b>. Every answer is evaluated in production, and so is the LLM judge doing the evaluating.</p>
 </div>
 """,

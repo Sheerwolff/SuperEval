@@ -70,9 +70,9 @@ jobs:
       - run: pip install -r requirements.txt
       - name: Latest snapshot
         run: python -m app.data.fetch_snapshot ${{ github.repository }}
-      - name: Synthetic shoppers (simulated) + monitors
+      - name: Synthetic questions (simulated analyst) + monitors
         run: python -m app.jobs traffic --n 12
-      - name: A few through the real agent, so live metrics keep flowing
+      - name: A few through the real analyst, so live metrics keep flowing
         if: ${{ env.OPENAI_API_KEY != '' }}
         run: python -m app.jobs traffic --n 2 --live
       - name: Layer 2 - judge canaries (once a day)

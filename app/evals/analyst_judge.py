@@ -18,8 +18,9 @@ import zlib
 
 from pydantic import BaseModel, Field
 
+from app.analyst.semantic import SCHEMA_DOC
 from app.config import cost_usd, settings
-from app.evals.deterministic import EvalOutcome
+from app.evals.outcome import EvalOutcome
 
 RUBRIC = """You review one answer from a data analyst agent about Israeli grocery prices. You get the
 question, the SQL queries the agent ran with (truncated) results, and its structured answer.
@@ -36,8 +37,11 @@ Score each 1-5 using these anchors:
   snapshot only); 3 = generic; 1 = missing where it matters or overclaims.
 - clarity: 5 = a lay reader gets the answer in one read; 1 = confusing.
 - grounded: true only if every number and fact in the answer appears in, or follows directly from,
-  the query results shown.
-Write `reasoning` (max 3 sentences) BEFORE the scores."""
+  the query results shown or the metric definitions below.
+Write `reasoning` (max 3 sentences) BEFORE the scores.
+
+The agent's documented metric definitions:
+""" + SCHEMA_DOC[SCHEMA_DOC.index("Canonical metrics"):]
 RUBRIC_HASH = hashlib.sha256(RUBRIC.encode()).hexdigest()[:10]
 
 

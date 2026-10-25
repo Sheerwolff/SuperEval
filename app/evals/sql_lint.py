@@ -5,6 +5,8 @@ Rules (applied to the queries an answer cites):
                         without matching products (the Simpson's trap) and without a canonical macro
   missing_city_filter   the question names a city but no cited query restricts to it
   small_sample          a cited result reports n < 10 products/stores and the answer gives no caveat
+  promo_denominator     a promotion "share" computed over promotions only, without the products the
+                        chain sells (no prices table, no promo_share macro)
 """
 from __future__ import annotations
 
@@ -50,6 +52,13 @@ def lint(question: str, analysis: dict, queries: list[dict], cities: list[str]) 
             out.append(LintFinding("unmatched_comparison", q["id"],
                                    f"{q['id']} compares an average price across chains/cities without matching "
                                    "products: each side averages a different basket."))
+    for q in cited:
+        sql = q["sql"].lower()
+        if ("promos" in sql and re.search(r"share|ratio|/|percent", sql)
+                and not re.search(r"promo_share\s*\(", sql) and not re.search(r"\bprices\b", sql)):
+            out.append(LintFinding("promo_denominator", q["id"],
+                                   f"{q['id']} computes a promotion share without the products the chain sells "
+                                   "(the denominator should be products sold, not promotions)."))
     city = city_in_question(question, cities)
     if city and cited and not any(city.lower() in q["sql"].lower() for q in cited):
         out.append(LintFinding("missing_city_filter", None,

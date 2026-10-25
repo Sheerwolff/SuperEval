@@ -21,7 +21,9 @@ today = utcnow().replace(minute=0, second=0, microsecond=0).replace(hour=0)
 wins = []
 for inc in INCIDENTS:
     d0 = today + timedelta(days=inc["day"])
-    wins.append((inc["kind"], d0 + timedelta(hours=inc["start"]), d0 + timedelta(hours=inc["end"] + 6)))
+    # judge rules look back 72h, so their alerts can legitimately land after the incident ends
+    grace = 72 if inc.get("layer") == "judge" else 6
+    wins.append((inc["kind"], d0 + timedelta(hours=inc["start"]), d0 + timedelta(hours=inc["end"] + grace)))
 caught, fp = {}, []
 with SessionLocal() as s:
     for a in s.query(Alert).order_by(Alert.created_at):

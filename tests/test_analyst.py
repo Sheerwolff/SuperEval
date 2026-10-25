@@ -37,3 +37,11 @@ def test_render_and_sim():
     assert r.answer and not r.answer["declined"] and r.queries[0]["error"] is None
     assert all(c["query_id"] == "q1" for c in r.answer["claims"])
     assert run_sim("tell me a joke", "a1").answer["declined"]
+
+
+def test_sql_str_quotes_apostrophes():
+    from app.analyst.semantic import sql_str
+
+    assert sql_str("Bet She'An") == "'Bet She''An'" and sql_str(None) == "NULL"
+    r = get_semantic().run(f"SELECT {sql_str(chr(39) + 'x')} AS v", "q")
+    assert r.error is None and r.rows[0][0] == "'x"

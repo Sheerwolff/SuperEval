@@ -7,7 +7,7 @@ import streamlit as st
 
 from app.config import settings
 from components import tour_banner, tour_mark
-from lib import deployment, eval_badges, setup
+from lib import eval_badges, setup
 from render import render_chart, render_queries
 
 setup("Ask the analyst", "💬")
@@ -106,15 +106,10 @@ def render_card(msg: dict) -> None:
 
 
 # ---- page --------------------------------------------------------------------
-dep = deployment() or {"current": "a1", "versions": {}}
 st.markdown("## 💬 Ask the analyst")
-top = st.columns([3, 2])
-top[0].caption("Ask an analytical question about grocery prices in Israel, in Hebrew or English. The analyst queries "
-               "today's published prices from 8 chains in 25 cities, shows its queries and method, and every answer "
-               "is evaluated on the spot.")
-v = dep["current"]
-top[1].markdown(f"Serving <span class='pill pill-{v[:2]}'>{v}</span> {dep['versions'].get(v, {}).get('label', v)}",
-                unsafe_allow_html=True)
+st.caption("Ask an analytical question about grocery prices in Israel, in Hebrew or English. The analyst queries "
+           "today's published prices from 8 chains in 25 cities, shows its queries and method, and every answer "
+           "is evaluated on the spot.")
 
 clicked = st.session_state.pop("queued_prompt", None)
 if not st.session_state.messages:

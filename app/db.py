@@ -203,6 +203,6 @@ def init_db() -> None:
     Base.metadata.create_all(engine)
 
 
-def current_version(session) -> str:
-    dep = session.query(Deployment).order_by(Deployment.created_at.desc(), Deployment.id.desc()).first()
-    return dep.agent_version if dep else "a1"
+def current_version(session=None) -> str:
+    """The production prompt version (one prompt; no deploy switching in the app)."""
+    return settings.prompt_version

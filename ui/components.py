@@ -74,19 +74,20 @@ def connect_compact() -> None:
 # ---- guided tour --------------------------------------------------------------
 TOUR = [
     {"key": "intro", "page": "Home.py", "title": "Welcome",
-     "hint": "A live LLM agent, its evals, and the monitors that watch both. About three minutes."},
-    {"key": "chat", "page": "pages/1_Chat.py", "title": "Ask the agent",
-     "hint": "Ask about any grocery item in Hebrew or English, or tap an example. Watch every answer get "
-             "scored: exact price checks against the database, plus an LLM judge."},
-    {"key": "break", "page": "pages/3_Live_Monitor.py", "title": "Break production",
-     "hint": "Deploy v2, a plausible 'faster & cheaper' prompt, then send 40 requests. Critical alerts "
-             "should open within seconds. Roll back when you've seen them."},
+     "hint": "An LLM data analyst, the evals that check every answer, and the monitors that watch both. "
+             "About three minutes."},
+    {"key": "chat", "page": "pages/1_Chat.py", "title": "Ask the analyst",
+     "hint": "Ask an analytical question in Hebrew or English, or tap an example. Every answer shows its SQL and is "
+             "checked on the spot: are the numbers in the query results, is the method sound?"},
+    {"key": "break", "page": "pages/3_Live_Monitor.py", "title": "Inject a fault",
+     "hint": "Click 'Model regression'. The analyst starts averaging each chain's own products, so every number is "
+             "still real and grounding stays green, but the method checks fire. Then try 'Schema change'."},
     {"key": "investigate", "page": "pages/4_Trace_Explorer.py", "title": "Investigate",
-     "hint": "Filtered to answers that failed price accuracy. Open one to see the quoted number that "
-             "isn't in any tool result, and the judge's reasoning."},
+     "hint": "Filtered to answers with an unsound method. Open one to see the SQL that compares different "
+             "products, and what the checks and the judge said."},
     {"key": "judge", "page": "pages/6_Judge_Monitor.py", "title": "Who watches the judge?",
-     "hint": "Layer 2. Nine days ago a judge model update made the judge lenient, so Layer 1 looked "
-             "*better*. Canaries and ground-truth recall caught it."},
+     "hint": "Layer 2. Nine days ago a judge model update made the judge lenient, so Layer 1 looked *better*. "
+             "Daily canaries with known verdicts caught it."},
     {"key": "wrap", "page": "Home.py", "title": "That's the tour", "hint": ""},
 ]
 
@@ -128,7 +129,7 @@ def tour_banner(key: str) -> None:
                     use_container_width=True, key=f"tour_next_{key}"):
             st.session_state.tour_step = idx + 1
             if nxt["key"] == "investigate":
-                st.session_state["trace_filter_failing"] = "price_accuracy"
+                st.session_state["trace_filter_failing"] = "method_lint"
             st.switch_page(nxt["page"])
         if c.button("Exit tour", use_container_width=True, key=f"tour_exit_{key}"):
             st.session_state.tour_step = None

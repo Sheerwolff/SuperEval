@@ -18,15 +18,15 @@ from app.monitor.aggregates import METRIC_LABELS, load_evals, load_traces, metri
 
 # Reference palette (validated categorical order; status colors reserved for state).
 # Dark mode uses the same hues stepped for the dark surface, not an automatic flip.
-_SERIES = {
-    "light": {"v1": "#2a78d6", "v2": "#eb6834", "v3": "#1baf7a", "all": "#2a78d6"},
-    "dark": {"v1": "#3987e5", "v2": "#d95926", "v3": "#199e70", "all": "#3987e5"},
+_SERIES = {  # project palette: blue (text-500), orange (secondary-500), red (accent-500), gold (primary-600)
+    "light": {"v1": "#1c83e3", "v2": "#e97816", "v3": "#bf980d", "all": "#1c83e3"},
+    "dark": {"v1": "#499ce9", "v2": "#ee9344", "v3": "#f2cb40", "all": "#499ce9"},
 }
 CATEGORICAL = {
-    "light": ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"],
-    "dark": ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767"],
+    "light": ["#1c83e3", "#e97816", "#bf980d", "#f73008", "#114e88", "#8c480d", "#77b4ee", "#f2ae73"],
+    "dark": ["#499ce9", "#ee9344", "#f2cb40", "#f95939", "#a4cdf4", "#f6c9a2", "#77b4ee", "#fcac9c"],
 }
-STATUS = {"good": "#0ca30c", "warning": "#fab219", "serious": "#ec835a", "critical": "#d03b3b"}
+STATUS = {"good": "#0ca30c", "warning": "#eebe11", "serious": "#e97816", "critical": "#f73008"}
 SEVERITY = {"critical": ("critical", "🔴"), "warn": ("serious", "🟠"), "info": ("warning", "🟡")}
 
 
@@ -40,8 +40,8 @@ def mode() -> str:
 def ink() -> dict:
     """Chart chrome that reads on both light and dark backgrounds (Streamlit decides the theme
     client-side, so the server can't reliably know it)."""
-    return {"primary": "#898781", "secondary": "#898781", "muted": "#898781", "grid": "rgba(128,128,128,0.18)",
-            "axis": "rgba(128,128,128,0.45)", "surface": "rgba(0,0,0,0)", "band": "rgba(128,128,128,0.18)"}
+    return {"primary": "#8c7a4a", "secondary": "#8c7a4a", "muted": "#8c7a4a", "grid": "rgba(204,153,0,0.16)",
+            "axis": "rgba(204,153,0,0.45)", "surface": "rgba(0,0,0,0)", "band": "rgba(238,190,17,0.16)"}
 
 
 def series() -> dict:
@@ -56,12 +56,9 @@ def setup(title: str, icon: str = "📊") -> None:
     st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
     with st.sidebar:
         st.markdown("### 🛒 PriceWatch Evals")
-        st.caption("Production eval monitoring for an LLM shopping agent over real Israeli supermarket prices.")
-        dep = deployment()
-        if dep:
-            v = dep["current"]
-            st.markdown(f"**Live version:** <span class='pill pill-{v}'>{v}</span>", unsafe_allow_html=True)
-        st.caption("LLM: " + (f"OpenAI `{settings.agent_model}`" if settings.live_llm else "simulated (no API key)"))
+        st.caption("Production eval monitoring for an LLM data-analyst agent over real Israeli supermarket prices.")
+        st.caption("Analyst: " + (f"OpenAI `{settings.agent_model}`" if settings.live_llm else "simulated (no API key)")
+                   + f" · judge `{settings.judge_model}`")
         theme_switch()
         st.divider()
         from components import connect_compact
@@ -69,8 +66,8 @@ def setup(title: str, icon: str = "📊") -> None:
         connect_compact()
 
 
-PAGES = ["", "Chat", "Price_Explorer", "Live_Monitor", "Trace_Explorer", "Version_Compare", "Judge_Monitor",
-         "Data_Health", "Architecture"]
+PAGES = ["", "Chat", "Price_Explorer", "Live_Monitor", "Trace_Explorer", "Judge_Monitor", "Architecture",
+         "Golden_Set", "Review"]
 THEMES = {"☀️ Light": "Light", "🌙 Dark": "Dark", "💻 Auto": "System"}
 
 
@@ -115,14 +112,6 @@ def api(method: str, path: str, **kw):
         return r.json()
     except httpx.HTTPError as exc:
         st.error(f"API error on {path}: {exc}")
-        return None
-
-
-@st.cache_data(ttl=5, show_spinner=False)
-def deployment():
-    try:
-        return httpx.get(settings.api_url + "/deployment", timeout=5).json()
-    except httpx.HTTPError:
         return None
 
 
@@ -213,13 +202,11 @@ def incident_windows() -> list[dict]:
     from app.traffic.backfill import INCIDENTS
 
     today = utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
-    short = {"bad_deploy": "bad deploy", "stale_feed": "stale feed", "latency": "latency", "drift": "drift",
-             "judge_lenient": "lenient judge"}
     out = []
     for inc in INCIDENTS:
         d0 = today + timedelta(days=inc["day"])
         out.append({**inc, "start": d0 + timedelta(hours=inc["start"]), "end": d0 + timedelta(hours=inc["end"]),
-                    "short": short[inc["kind"]]})
+                    "short": inc["kind"].replace("_", " ")})
     return out
 
 

@@ -1,16 +1,21 @@
 /* Theme-neutral tokens: translucent surfaces and inherited text color, so custom HTML matches
    whichever theme (light or dark) Streamlit is actually rendering. */
 :root {
-  --pw-surface: rgba(128, 128, 128, 0.07);
+  /* project palette (light steps; they read on both themes since surfaces are translucent) */
+  --pw-text-500: #1c83e3;  --pw-text-600: #1669b6;
+  --pw-gold-400: #f2cb40;  --pw-gold-500: #eebe11;  --pw-gold-600: #bf980d;
+  --pw-orange-500: #e97816; --pw-orange-600: #bb6011;
+  --pw-red-500: #f73008;    --pw-red-600: #c62606;
+  --pw-surface: rgba(255, 191, 0, 0.07);
   --pw-ink: inherit;
   --pw-ink-2: inherit;
-  --pw-muted: #898781;
-  --pw-border: rgba(128, 128, 128, 0.28);
+  --pw-muted: #8c7a4a;
+  --pw-border: rgba(204, 153, 0, 0.32);
   --pw-good: #0ca30c;
   --pw-good-text: #0a8f0a;
-  --pw-critical: #d03b3b;
-  --pw-v1: #2a78d6;
-  --pw-v2: #eb6834;
+  --pw-critical: var(--pw-red-600);
+  --pw-v1: var(--pw-text-500);
+  --pw-v2: var(--pw-orange-500);
 }
 .hero p, .tile .label, .connect-text p, .tour-hint, .alert-row { opacity: 0.88; }
 
@@ -30,7 +35,7 @@ h1, h2, h3 { letter-spacing: -0.01em; }
 .tile .label { color: var(--pw-ink-2); font-size: 0.82rem; }
 .tile .value { color: var(--pw-ink); font-size: 1.7rem; font-weight: 600; line-height: 1.2; margin-top: 2px; }
 .tile .sub { color: var(--pw-muted); font-size: 0.78rem; margin-top: 2px; }
-.tile.bad { border-color: rgba(208, 59, 59, 0.45); }
+.tile.bad { border-color: rgba(247, 48, 8, 0.45); background: rgba(247, 48, 8, 0.06); }
 .tile.bad .value { color: var(--pw-critical); }
 
 .pill { border-radius: 999px; padding: 1px 9px; font-size: 0.8rem; font-weight: 600; color: white; }
@@ -50,9 +55,9 @@ h1, h2, h3 { letter-spacing: -0.01em; }
   padding: 8px 12px; margin-bottom: 8px; background: var(--pw-surface);
 }
 .alert-row .meta { color: var(--pw-muted); font-size: 0.78rem; }
-.alert-critical { border-left-color: #d03b3b; }
-.alert-warn { border-left-color: #ec835a; }
-.alert-info { border-left-color: #fab219; }
+.alert-critical { border-left-color: var(--pw-red-500); }
+.alert-warn { border-left-color: var(--pw-orange-500); }
+.alert-info { border-left-color: var(--pw-gold-500); }
 .alert-resolved { opacity: 0.62; }
 
 .rtl { direction: rtl; text-align: right; }
@@ -62,10 +67,10 @@ h1, h2, h3 { letter-spacing: -0.01em; }
 .connect-card {
   display: flex; flex-direction: column; gap: 14px; align-items: flex-start;
   border: 1px solid var(--pw-border); border-radius: 14px; padding: 18px 20px; margin: 8px 0 16px;
-  background: linear-gradient(135deg, rgba(42, 120, 214, 0.08), rgba(42, 120, 214, 0.02));
+  background: linear-gradient(135deg, rgba(238, 190, 17, 0.16), rgba(233, 120, 22, 0.05));
 }
 .connect-text { min-width: 0; }
-.connect-kicker { font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--pw-v1); font-weight: 600; }
+.connect-kicker { font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--pw-orange-600); font-weight: 700; }
 .connect-name { font-size: 1.35rem; font-weight: 650; color: var(--pw-ink); margin: 2px 0 4px; }
 .connect-text p { color: var(--pw-ink-2); margin: 0; font-size: 0.95rem; }
 .connect-actions { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -85,7 +90,7 @@ h1, h2, h3 { letter-spacing: -0.01em; }
 .connect-icon { color: var(--pw-ink-2) !important; display: inline-flex; }
 
 /* ---- tour ---- */
-.tour-kicker { font-size: 0.75rem; color: var(--pw-v1); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+.tour-kicker { font-size: 0.75rem; color: var(--pw-orange-600); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
 .tour-title { font-weight: 650; font-size: 1.05rem; color: var(--pw-ink); }
 .tour-hint { color: var(--pw-ink-2); font-size: 0.9rem; }
 
@@ -100,3 +105,12 @@ h1, h2, h3 { letter-spacing: -0.01em; }
 .pill-a1 { background: #2a78d6; }
 .pill-a2 { background: #0f7a54; }
 .pill-a9 { background: #eb6834; }
+
+/* ---- palette accents ---- */
+.hero h1 { background: linear-gradient(90deg, var(--pw-text-600), var(--pw-text-500) 55%, var(--pw-orange-500));
+  -webkit-background-clip: text; background-clip: text; color: transparent; }
+.tile { border-top: 3px solid var(--pw-gold-500); }
+.tile .value { color: var(--pw-text-500); }
+.tile.bad .value { color: var(--pw-red-600); }
+.chip-bad { color: var(--pw-red-600); border-color: rgba(247, 48, 8, 0.4); }
+.pill { background: var(--pw-gold-600); }

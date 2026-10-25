@@ -5,24 +5,26 @@ from sqlalchemy import select
 from app.db import EvalResult, SessionLocal, Trace
 from components import tour_banner, tour_mark
 from lib import eval_badges, setup
+from render import render_chart, render_queries
 
 setup("Trace explorer", "🔎")
 tour_banner("investigate")
 st.markdown("## 🔎 Trace explorer")
+st.caption("Every answer the analyst gave, with the SQL it ran and every automated verdict. Filter to a failing "
+           "check to see exactly what went wrong.")
 
-f1, f2, f3, f4 = st.columns(4)
-version = f1.selectbox("Version", ["any", "v1", "v2"])
-source = f2.selectbox("Source", ["any", "user", "synthetic", "backfill"])
-FAILING = ["any", "price_accuracy", "grounded_prices", "product_relevance", "language_match", "scope_handling",
-           "tool_use", "promo_mentioned", "judge_helpfulness", "judge_groundedness", "judge_relevance"]
+FAILING = ["any", "grounding", "method_lint", "canonical_check", "sql_health", "completion", "chart_lint",
+           "decline_check", "assumption_check", "language_match", "judge_method", "judge_groundedness",
+           "judge_helpfulness"]
+TOPICS = ["any", "comparison", "lookup", "spread", "promo", "geo", "ambiguous", "unanswerable", "injection"]
 preset = st.session_state.pop("trace_filter_failing", None)
-failing = f3.selectbox("Failing evaluator", FAILING, index=FAILING.index(preset) if preset in FAILING else 0)
-topic = f4.selectbox("Topic", ["any", "price_lookup", "basket", "stores", "off_topic", "injection"])
+f1, f2, f3 = st.columns(3)
+failing = f1.selectbox("Failing check", FAILING, index=FAILING.index(preset) if preset in FAILING else 0)
+topic = f2.selectbox("Question type", TOPICS)
+source = f3.selectbox("Source", ["any", "user", "synthetic", "backfill"])
 
 with SessionLocal() as s:
     q = select(Trace).order_by(Trace.created_at.desc()).limit(300)
-    if version != "any":
-        q = q.where(Trace.agent_version == version)
     if source != "any":
         q = q.where(Trace.source == source)
     if topic != "any":
@@ -32,49 +34,46 @@ with SessionLocal() as s:
             EvalResult.evaluator == failing, EvalResult.passed.is_(False))))
     rows = s.execute(q).scalars().all()
     table = pd.DataFrame([{
-        "time": t.created_at.strftime("%m-%d %H:%M"), "version": t.agent_version, "source": t.source,
-        "topic": t.topic, "lang": t.language, "question": t.question,
-        "failed": ", ".join(e.evaluator for e in t.evals if e.passed is False) or "—",
-        "latency_s": round(t.latency_ms / 1000, 1), "id": t.id,
-    } for t in rows])
+        "time": t.created_at.strftime("%m-%d %H:%M"), "source": t.source, "type": t.topic, "lang": t.language,
+        "question": t.question, "failed": ", ".join(e.evaluator for e in t.evals if e.passed is False) or "—",
+        "latency_s": round(t.latency_ms / 1000, 1), "id": t.id} for t in rows])
 
 st.caption(f"{len(table)} most recent matching traces")
 if table.empty:
     st.info("No traces match these filters.")
     st.stop()
-
-event = st.dataframe(table.drop(columns=["id"]), use_container_width=True, hide_index=True,
-                     on_select="rerun", selection_mode="single-row", height=320)
+event = st.dataframe(table.drop(columns=["id"]), use_container_width=True, hide_index=True, on_select="rerun",
+                     selection_mode="single-row", height=300)
 sel = event.selection.rows[0] if event.selection.rows else 0
 trace_id = table.iloc[sel]["id"]
+if failing != "any":
+    tour_mark("investigate")
 
 with SessionLocal() as s:
     t = s.get(Trace, trace_id)
-    evals = [{"evaluator": e.evaluator, "kind": e.kind, "score": e.score, "passed": e.passed, "details": e.details}
-             for e in t.evals]
+    tr = {"id": t.id, "question": t.question, "answer": t.answer, "analysis": t.analysis, "tool_calls": t.tool_calls,
+          "error": t.error}
+    meta = (f"{t.created_at:%Y-%m-%d %H:%M} UTC · {t.source} · {t.model} · {t.steps} steps · "
+            f"{t.latency_ms / 1000:.1f}s · {t.input_tokens + t.output_tokens:,} tokens · ${t.cost_usd:.4f}")
+    evals = [{"evaluator": e.evaluator, "kind": e.kind, "passed": e.passed, "details": e.details} for e in t.evals]
 
-if failing != "any":
-    tour_mark("investigate")
 st.divider()
 a, b = st.columns([3, 2], gap="large")
 with a:
-    st.markdown(f"#### Trace `{t.id[:8]}` · <span class='pill pill-{t.agent_version}'>{t.agent_version}</span>",
-                unsafe_allow_html=True)
-    st.markdown(f"**Q:** {t.question}")
-    st.markdown(f"**A:** {t.answer}")
-    st.caption(f"{t.created_at:%Y-%m-%d %H:%M} UTC · {t.source} · {t.model} · prompt {t.prompt_hash} · "
-               f"snapshot {t.snapshot_date} · {t.latency_ms / 1000:.1f}s · "
-               f"{t.input_tokens}+{t.output_tokens} tokens · ${t.cost_usd:.4f}")
-    st.markdown("**Tool calls**")
-    if not t.tool_calls:
-        st.caption("None. The model answered without looking anything up.")
-    for c in t.tool_calls:
-        with st.expander(f"{c['name']}({', '.join(f'{k}={v!r}' for k, v in (c.get('args') or {}).items())})"):
-            st.json(c.get("result") if "result" in c else {"error": c.get("error")})
+    st.markdown(f"#### {tr['question']}")
+    st.caption(meta)
+    st.markdown(tr["answer"] or f"*(no answer: {tr['error']})*")
+    render_chart(tr, key="_explorer")
+    render_queries(tr, expanded=failing != "any")
 with b:
-    st.markdown("#### Evals")
-    st.markdown(eval_badges(evals), unsafe_allow_html=True)
+    st.markdown("#### Verdicts")
+    st.markdown(eval_badges(evals) or "—", unsafe_allow_html=True)
     for e in evals:
-        if e["passed"] is False or e["kind"] == "judge":
-            with st.expander(f"{'✗' if e['passed'] is False else '•'} {e['evaluator']}", expanded=e["passed"] is False):
-                st.json(e["details"])
+        if e["passed"] is False:
+            with st.expander(f"✗ {e['evaluator']}", expanded=True):
+                if e["details"].get("message"):
+                    st.markdown(e["details"]["message"])
+                st.json(e["details"], expanded=False)
+    judge = next((e for e in evals if e["kind"] == "judge" and e["details"].get("reasoning")), None)
+    if judge:
+        st.caption(f"Judge ({judge['details'].get('judge_model')}): {judge['details']['reasoning']}")

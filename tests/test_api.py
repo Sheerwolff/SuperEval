@@ -19,8 +19,10 @@ def test_chat_stream_emits_query_steps_then_done(monkeypatch):
     assert any("rows" in (e.get("summary") or "") for e in events if e["type"] == "tool_end")
 
 
-def test_health_and_deploy_roundtrip():
+def test_health_and_fault_injection(monkeypatch):
+    monkeypatch.setattr(type(settings), "live_llm", property(lambda self: False))
     with TestClient(main.app) as client:
         assert client.get("/health").json()["ok"]
-        assert client.post("/deployment", json={"version": "a1"}).json()["current"] == "a1"
-        assert client.post("/deployment", json={"version": "nope"}).status_code == 400
+        r = client.post("/simulate", json={"n": 5, "fault": "degraded_method"}).json()
+        assert r["generated"] == 5 and r["fault"] == "degraded_method"
+        assert client.post("/simulate", json={"n": 5, "fault": "nope"}).status_code == 422

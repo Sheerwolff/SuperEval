@@ -17,8 +17,8 @@ from __future__ import annotations
 import re
 
 from app.agent.textutil import CHAIN_HE, INJECTION_PATTERNS, detect_language
-from app.analyst.semantic import get_semantic
-from app.evals.deterministic import EvalOutcome
+from app.analyst.semantic import get_semantic, sql_str
+from app.evals.outcome import EvalOutcome
 from app.evals.sql_lint import city_in_question, lint
 
 LATENCY_SLO_MS = 20000
@@ -124,8 +124,8 @@ def canonical_check(trace) -> EvalOutcome:
     cat = next((c for c in sem.categories if c.split(" ")[0] in q.lower()), None)
     desc = bool(re.search(r"expensive|priciest|יקר", q, re.I))
     order = "DESC" if desc else "ASC"
-    r = sem.run(f"SELECT chain, \"index\" FROM chain_price_index({repr(city) if city else 'NULL'}, "
-                f"{repr(cat) if cat else 'NULL'}) ORDER BY \"index\" {order}", "canon")
+    r = sem.run(f"SELECT chain, \"index\" FROM chain_price_index({sql_str(city)}, {sql_str(cat)}) "
+                f"ORDER BY \"index\" {order}", "canon")
     if r.error or not r.rows:
         return EvalOutcome("canonical_check", None, None)
     top_val = r.rows[0][1]

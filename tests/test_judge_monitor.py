@@ -36,7 +36,7 @@ def judged(n_bad: int, judge_catches: float, n_good: int = 100, repeat_flip: flo
 def ctx(judge=None, canaries=None):
     empty = pd.DataFrame(columns=["created_at"])
     return Context(now=NOW, traces=empty, evals=empty, freshness={}, spend_today=0, budget=0,
-                   freshness_sla_hours=36, deployed="v1", judge=judge, canaries=canaries)
+                   freshness_sla_hours=36, judge=judge, canaries=canaries)
 
 
 def test_healthy_judge_has_high_recall_and_agreement():

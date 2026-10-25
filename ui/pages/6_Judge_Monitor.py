@@ -6,12 +6,12 @@ import plotly.graph_objects as go
 import streamlit as st
 from sqlalchemy import select
 
-from app.db import Alert, EvalResult, HumanLabel, SessionLocal, Trace, utcnow
+from app.db import Alert, SessionLocal, utcnow
+from app.evals.analyst_judge import RUBRIC_HASH
 from app.evals.calibration import agreement
-from app.evals.judge import RUBRIC_HASH
 from app.evals.judge_monitor import JUDGE_METRICS, canary_runs, load_canaries, load_judge_frame
 from components import tour_banner
-from lib import SEVERITY, api, base_layout, incident_windows, ink, series, setup, tiles
+from lib import SEVERITY, base_layout, incident_windows, ink, series, setup, tiles
 
 setup("Judge monitor", "⚖️")
 tour_banner("judge")
@@ -163,48 +163,15 @@ with bias_tab:
 
 # ---- human calibration ------------------------------------------------------------
 with human_tab:
-    st.caption("The gold standard: label judged replies yourself and see how often the judge agrees with you. "
-               "Cohen's κ corrects for chance agreement. Below 0.6 (n ≥ 30) a Layer 2 alert opens.")
+    st.caption("The gold standard: your owner judgments on the Review page, compared with the judge's verdicts on the "
+               "same answers. Cohen's κ corrects for chance agreement; below 0.6 (n ≥ 30) a Layer 2 alert opens.")
     res = agreement()
-    items = [("Labelled traces", str(res["n"]), "aim for 40+", False)]
-    for key, name in (("helpful", "Helpfulness"), ("grounded", "Groundedness")):
+    items = [("Owner-judged traces", str(res["n"]), "aim for 40+", False)]
+    for key, name in (("helpful", "Answer correct ↔ judge 'answers'"), ("grounded", "Method sound ↔ judge 'method'")):
         r = res.get(key)
         val = "—" if not r or r["kappa"] is None else f"κ = {r['kappa']:.2f}"
-        sub = "" if not r else (f"{r['agreement']:.0%} raw agreement · too lenient {r['judge_too_lenient']}× · "
-                                f"too strict {r['judge_too_strict']}×")
-        items.append((name, val, sub, bool(r and r["kappa"] is not None and res["n"] >= 30 and r["kappa"] < 0.6)))
+        sub = "" if not r else (f"{r['agreement']:.0%} agree · judge too lenient {r['judge_too_lenient']}× · "
+                                f"too strict {r['judge_too_strict']}× · n={r['n']}")
+        items.append((name, val, sub, bool(r and r["kappa"] is not None and r["n"] >= 30 and r["kappa"] < 0.6)))
     tiles(items)
-
-    with SessionLocal() as s:
-        labelled = {tid for (tid,) in s.execute(select(HumanLabel.trace_id)).all()}
-        judged = [tid for (tid,) in s.execute(
-            select(EvalResult.trace_id).where(EvalResult.evaluator == "judge_helpfulness")
-            .order_by(EvalResult.created_at.desc()).limit(3000)).all()]
-    pool = [t for t in judged if t not in labelled]
-    if not pool:
-        st.success("Nothing left to label.")
-    else:
-        if st.session_state.get("label_id") not in pool:
-            st.session_state.label_id = random.choice(pool)
-        with SessionLocal() as s:
-            t = s.get(Trace, st.session_state.label_id)
-            question, answer, tools, model = t.question, t.answer, t.tool_calls, t.model
-        st.markdown("#### Label this reply")
-        st.caption(f"Served by `{model}`. Judge it before you look at the judge, so its verdict doesn't anchor you.")
-        st.markdown(f"**Q:** {question}")
-        st.markdown(f"**A:** {answer}")
-        with st.expander("What the agent saw (tool results)"):
-            st.json(tools, expanded=False)
-        with st.form("label"):
-            helpful = st.radio("Helpful? Does it answer what was asked, usefully?", ["yes", "no"], horizontal=True)
-            grounded = st.radio("Grounded? Is every fact supported by the tool results?", ["yes", "no"],
-                                horizontal=True)
-            note = st.text_input("Note (optional)")
-            if st.form_submit_button("Save label", type="primary"):
-                api("POST", "/labels", json={"trace_id": st.session_state.label_id, "helpful": helpful == "yes",
-                                             "grounded": grounded == "yes", "note": note or None})
-                del st.session_state["label_id"]
-                st.rerun()
-        if st.button("Skip"):
-            del st.session_state["label_id"]
-            st.rerun()
+    st.page_link("pages/10_Review.py", label="Judge traces on the Review page", icon="🧑‍⚖️")

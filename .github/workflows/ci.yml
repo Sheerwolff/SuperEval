@@ -19,9 +19,12 @@ jobs:
       - run: pytest -q
 
   eval-gate:
-    # Offline golden-set regression suite. Fails the PR if the production prompt
-    # drops below the gates in app/evals/offline_runner.py. v3 is the production prompt.
+    # Golden-set benchmark on every PR. The selftest proves the scorers and reference SQL agree with
+    # the snapshot (free); the live run gates the production prompt when an API key is configured.
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -29,12 +32,9 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -r requirements.txt
-      - name: Offline eval (simulated agent, every PR)
-        run: python -m app.evals.offline_runner --version v3 --gate
-      - name: Offline eval (live OpenAI agent, when a key is configured)
+      - name: Golden set selftest (reference SQL vs. scorers, free)
+        run: python -m app.evals.golden selftest --all
+      - name: Benchmark the production prompt (live OpenAI analyst)
+        # Only human-approved items gate. Exit code 2 means none are approved yet, so the step is skipped.
         if: ${{ env.OPENAI_API_KEY != '' }}
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: python -m app.evals.offline_runner --version v3 --live --limit 20 --max-cost 0.25 --gate
-    env:
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: python -m app.evals.bench --version a2 --live --max-cost 0.5 --gate || [ $? -eq 2 ]

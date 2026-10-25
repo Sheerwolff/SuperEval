@@ -13,7 +13,7 @@ def frames(n_traces, pass_rate, version="v1", start=timedelta(hours=2), latency=
     traces = pd.DataFrame({"id": [f"t{i}" for i in range(n_traces)], "created_at": ts, "agent_version": version,
                            "latency_ms": latency, "cost_usd": 0.001, "error": None, "topic": topic, "language": "en"})
     n_pass = round(n_traces * pass_rate)
-    evals = pd.DataFrame({"trace_id": traces.id, "created_at": ts, "evaluator": "price_accuracy",
+    evals = pd.DataFrame({"trace_id": traces.id, "created_at": ts, "evaluator": "grounding",
                           "score": [1.0] * n_pass + [0.0] * (n_traces - n_pass),
                           "passed": [True] * n_pass + [False] * (n_traces - n_pass),
                           "agent_version": version, "topic": topic, "language": "en"})
@@ -22,7 +22,7 @@ def frames(n_traces, pass_rate, version="v1", start=timedelta(hours=2), latency=
 
 def ctx(traces, evals, **kw):
     base = dict(now=NOW, traces=traces, evals=evals, freshness={}, spend_today=0.0, budget=0.0,
-                freshness_sla_hours=36, deployed="v1")
+                freshness_sla_hours=36)
     base.update(kw)
     return Context(**base)
 
@@ -35,15 +35,13 @@ def test_wilson_bounds():
 
 def test_threshold_ignores_single_miss_on_small_sample():
     tr, ev = frames(15, 14 / 15)  # 93% on n=15: below the 95% SLO, but not significantly
-    assert ThresholdRule("price_accuracy", "<", 0.95).check(ctx(tr, ev)) == []
+    assert ThresholdRule("grounding", "<", 0.95).check(ctx(tr, ev)) == []
 
 
-def test_threshold_fires_on_clear_regression_for_deployed_version_only():
-    tr, ev = frames(30, 0.3, version="v2")
-    rule = ThresholdRule("price_accuracy", "<", 0.95)
-    fired = rule.check(ctx(tr, ev, deployed="v2"))
-    assert len(fired) == 1 and fired[0].agent_version == "v2" and fired[0].severity == "critical"
-    assert rule.check(ctx(tr, ev, deployed="v1")) == []  # rolled back -> resolves
+def test_threshold_fires_on_clear_regression():
+    tr, ev = frames(30, 0.3)
+    fired = ThresholdRule("grounding", "<", 0.95).check(ctx(tr, ev))
+    assert len(fired) == 1 and fired[0].severity == "critical"
 
 
 def test_latency_threshold():

@@ -88,6 +88,13 @@ MACROS = [
 ]
 
 
+def sql_str(value: str | None) -> str:
+    """A SQL string literal (or NULL): 'Bet She''An', never Python's repr, which DuckDB reads as an identifier."""
+    if value is None:
+        return "NULL"
+    return "'" + str(value).replace("'", "''") + "'"
+
+
 class SQLRejected(Exception):
     """The statement isn't a single read-only SELECT."""
 

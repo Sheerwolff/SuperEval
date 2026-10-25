@@ -1,8 +1,8 @@
 """Scheduled jobs (run by GitHub Actions against the production database).
 
     python -m app.jobs record-ingest          # after app.data.ingest: log the snapshot as an ingest run
-    python -m app.jobs traffic --n 20         # synthetic shoppers on the deployed version, then monitors
-    python -m app.jobs traffic --n 5 --live   # same, through the real OpenAI agent (costs tokens)
+    python -m app.jobs traffic --n 20         # synthetic questions through the simulated analyst, then monitors
+    python -m app.jobs traffic --n 2 --live   # same, through the real OpenAI analyst (costs tokens)
 """
 from __future__ import annotations
 
@@ -11,8 +11,9 @@ import random
 
 from sqlalchemy import select
 
+from app.config import settings
 from app.data.catalog import get_catalog
-from app.db import IngestRun, SessionLocal, current_version, init_db
+from app.db import IngestRun, SessionLocal, init_db
 
 
 def sync_ingest_meta() -> bool:
@@ -32,30 +33,21 @@ def sync_ingest_meta() -> bool:
 
 
 def synthetic_traffic(n: int, live: bool = False) -> dict:
+    from app.analyst.pipeline import handle_analysis
+    from app.analyst.semantic import get_semantic
+    from app.analyst.sim import sim_analysis
     from app.monitor.alerts import run_monitors
-    from app.pipeline import handle_question
-    from app.traffic.synthetic import Shopper
+    from app.traffic.analyst_traffic import Asker
 
-    shopper = Shopper(get_catalog(), random.Random())
-    with SessionLocal() as s:
-        version = current_version(s)
+    asker = Asker(get_semantic(), random.Random())
+    version = settings.prompt_version
     for _ in range(n):
-        q = shopper.ask()
+        q = asker.ask()
         if live:
-            handle_question(q.text, version, source="synthetic", session_id="cron")
+            handle_analysis(q.text, version, source="synthetic", session_id="cron")
         else:
-            from app.agent.agent import run_agent
-            from app.pipeline import evaluate, to_trace
-
-            res = run_agent(q.text, version, force_sim=True, intent=q.intent, seed=random.randrange(1 << 30))
-            t = to_trace(res, "synthetic", "cron")
-            with SessionLocal() as s:
-                s.add(t)
-                s.flush()
-                for e in evaluate(t, force_sim_judge=True):
-                    e.trace_id = t.id
-                    s.add(e)
-                s.commit()
+            sim_analysis(q.text, version, session_id="cron", source="synthetic", intent=q.intent,
+                         seed=random.randrange(1 << 30))
     return {"version": version, "n": n, **run_monitors()}
 
 

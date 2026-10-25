@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parent.parent
 class Settings:
     openai_api_key: str | None = os.getenv("OPENAI_API_KEY") or None
     agent_model: str = os.getenv("AGENT_MODEL", "gpt-5-mini")
+    prompt_version: str = os.getenv("PROMPT_VERSION", "a2")  # the production analyst prompt
     judge_model: str = os.getenv("JUDGE_MODEL", "gpt-5")  # stronger than the agent (decision)
     database_url: str = os.getenv("DATABASE_URL", f"sqlite:///{ROOT / 'data' / 'pricewatch.db'}")
     # the full snapshot (downloaded by app.data.fetch_snapshot) if present, else the committed sample
