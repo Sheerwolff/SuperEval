@@ -1,5 +1,5 @@
 ---
-title: PriceWatch Evals
+title: SuperEval
 emoji: 🛒
 colorFrom: yellow
 colorTo: blue
@@ -9,7 +9,9 @@ pinned: false
 short_description: Two-layer eval monitoring for an LLM data-analyst agent
 ---
 
-# PriceWatch Evals
+# SuperEval
+
+*A production eval framework to agent answers about Israeli supermarket prices.*
 
 **How I monitor LLM evals in production, including monitoring the LLM judge itself.** It runs on a real agent
 over real data.

@@ -33,13 +33,13 @@ def _whatsapp_url() -> str | None:
     digits = re.sub(r"\D", "", settings.contact_whatsapp or "")
     if not digits:
         return None
-    text = quote("Hi Sheer, I saw PriceWatch Evals and would love to talk.")
+    text = quote("Hi Sheer, I saw SuperEval and would love to talk.")
     return f"https://wa.me/{digits}?text={text}"
 
 
 def _links() -> list[tuple[str, str, str]]:
     out = [("linkedin", "LinkedIn", settings.contact_linkedin),
-           ("email", "Email", f"mailto:{settings.contact_email}?subject={quote('PriceWatch Evals')}")]
+           ("email", "Email", f"mailto:{settings.contact_email}?subject={quote('SuperEval')}")]
     wa = _whatsapp_url()
     if wa:
         out.append(("whatsapp", "WhatsApp", wa))

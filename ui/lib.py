@@ -50,13 +50,13 @@ def series() -> dict:
 
 
 def setup(title: str, icon: str = "📊") -> None:
-    st.set_page_config(page_title=f"{title} · PriceWatch Evals", page_icon=icon, layout="wide")
+    st.set_page_config(page_title=f"{title} · SuperEval", page_icon=icon, layout="wide")
     init_db()
     css = (Path(__file__).parent / "theme.css").read_text(encoding="utf-8")
     st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
     with st.sidebar:
-        st.markdown("### 🛒 PriceWatch Evals")
-        st.caption("Production eval monitoring for an LLM data-analyst agent over real Israeli supermarket prices.")
+        st.markdown("### 🛒 SuperEval")
+        st.caption("A production eval framework to agent answers about Israeli supermarket prices.")
         st.caption("Analyst: " + (f"OpenAI `{settings.agent_model}`" if settings.live_llm else "simulated (no API key)")
                    + f" · judge `{settings.judge_model}`")
         theme_switch()

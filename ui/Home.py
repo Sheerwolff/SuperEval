@@ -35,7 +35,8 @@ In about three minutes you saw:
 st.markdown(
     """
 <div class="hero">
-<h1>PriceWatch Evals</h1>
+<h1>SuperEval</h1>
+<p><b>A production eval framework to agent answers about Israeli supermarket prices.</b></p>
 <p>A live LLM data-analyst agent answers analytical questions about grocery prices over <b>real, daily-published Israeli supermarket
 data</b>. Every answer is evaluated in production, and so is the LLM judge doing the evaluating.</p>
 </div>

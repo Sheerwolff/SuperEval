@@ -53,7 +53,7 @@ async def lifespan(_app: FastAPI):
     yield
 
 
-app = FastAPI(title="PriceWatch Evals API", version="2.0", lifespan=lifespan)
+app = FastAPI(title="SuperEval API", version="2.0", lifespan=lifespan)
 
 Fault = Literal["none", "degraded_method", "schema_broken", "lenient_judge", "slow_llm"]
 
