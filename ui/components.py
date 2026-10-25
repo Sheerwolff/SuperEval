@@ -1,4 +1,4 @@
-"""Reusable UI pieces: the "Let's connect" card and the guided tour."""
+"""Reusable UI pieces: the "Let's connect" card."""
 from __future__ import annotations
 
 import re
@@ -55,7 +55,7 @@ def connect_card(headline: str = "Let's connect", body: str | None = None) -> No
     )
     st.markdown(
         f"<div class='connect-card'><div class='connect-text'><div class='connect-kicker'>{headline}</div>"
-        f"<div class='connect-name'>{settings.contact_name}</div><p>{body}</p></div>"
+        f"<div class='connect-name'>{settings.contact_name} 🐺</div><p>{body}</p></div>"
         f"<div class='connect-actions'>{buttons}</div></div>",
         unsafe_allow_html=True,
     )
@@ -67,73 +67,8 @@ def connect_compact() -> None:
         f"aria-label='{label}' title='{label}'>{ICONS[key]}</a>"
         for key, label, url in _links()
     )
-    st.markdown(f"<div class='connect-compact'><span>Built by {settings.contact_name}</span>"
+    st.markdown(f"<div class='connect-compact'><span>Built by {settings.contact_name} 🐺</span>"
                 f"<div>{icons}</div></div>", unsafe_allow_html=True)
-
-
-# ---- guided tour --------------------------------------------------------------
-TOUR = [
-    {"key": "intro", "page": "Home.py", "title": "Welcome",
-     "hint": "An LLM data analyst, the evals that check every answer, and the monitors that watch both. "
-             "About three minutes."},
-    {"key": "chat", "page": "pages/1_Chat.py", "title": "Ask the analyst",
-     "hint": "Ask an analytical question in Hebrew or English, or tap an example. Every answer shows its SQL and is "
-             "checked on the spot: are the numbers in the query results, is the method sound?"},
-    {"key": "break", "page": "pages/3_Live_Monitor.py", "title": "Inject a fault",
-     "hint": "Click 'Model regression'. The analyst starts averaging each chain's own products, so every number is "
-             "still real and grounding stays green, but the method checks fire. Then try 'Schema change'."},
-    {"key": "investigate", "page": "pages/4_Trace_Explorer.py", "title": "Investigate",
-     "hint": "Filtered to answers with an unsound method. Open one to see the SQL that compares different "
-             "products, and what the checks and the judge said."},
-    {"key": "judge", "page": "pages/6_Judge_Monitor.py", "title": "Who watches the judge?",
-     "hint": "Layer 2. Nine days ago a judge model update made the judge lenient, so Layer 1 looked *better*. "
-             "Daily canaries with known verdicts caught it."},
-    {"key": "wrap", "page": "Home.py", "title": "That's the tour", "hint": ""},
-]
-
-
-def tour_active() -> bool:
-    return st.session_state.get("tour_step") is not None
-
-
-def tour_start() -> None:
-    st.session_state.tour_step = 1
-    st.session_state.tour_done = set()
-    st.switch_page(TOUR[1]["page"])
-
-
-def tour_mark(key: str) -> None:
-    """Record that the visitor did a step's action (sent a chat, deployed v2, ...)."""
-    if tour_active():
-        st.session_state.setdefault("tour_done", set()).add(key)
-
-
-def tour_banner(key: str) -> None:
-    """Shown at the top of each page while the tour is running."""
-    if not tour_active():
-        return
-    idx = next((i for i, s in enumerate(TOUR) if s["key"] == key), None)
-    if idx is None:
-        return
-    st.session_state.tour_step = idx
-    step = TOUR[idx]
-    done = key in st.session_state.get("tour_done", set())
-    total = len(TOUR) - 1
-    with st.container(border=True):
-        a, b, c = st.columns([6, 1.3, 1.1], vertical_alignment="center")
-        a.markdown(f"<div class='tour-kicker'>Tour · step {idx} of {total - 1}"
-                   f"{' · ✓ done' if done else ''}</div><div class='tour-title'>{step['title']}</div>"
-                   f"<div class='tour-hint'>{step['hint']}</div>", unsafe_allow_html=True)
-        nxt = TOUR[idx + 1]
-        if b.button("Next →" if idx + 1 < total else "Finish →", type="primary" if done else "secondary",
-                    use_container_width=True, key=f"tour_next_{key}"):
-            st.session_state.tour_step = idx + 1
-            if nxt["key"] == "investigate":
-                st.session_state["trace_filter_failing"] = "method_lint"
-            st.switch_page(nxt["page"])
-        if c.button("Exit tour", use_container_width=True, key=f"tour_exit_{key}"):
-            st.session_state.tour_step = None
-            st.rerun()
 
 
 # ---- roles ---------------------------------------------------------------------

@@ -10,7 +10,6 @@ from app.evals.bench import RUNS
 from app.evals.human import judgments_frame, override_rate
 from app.evals.judge_monitor import JUDGE_METRICS, canary_runs, load_canaries, load_judge_frame
 from app.monitor.aggregates import metric_value
-from components import tour_banner, tour_mark
 from lib import (
     CATEGORICAL,
     SEVERITY,
@@ -27,7 +26,6 @@ from lib import (
 )
 
 setup("Live monitor", "📈")
-tour_banner("break")
 st.markdown("## 📈 Live monitor")
 st.caption("Every analyst answer is evaluated as it's served: deterministic checks on 100% of traffic (Layer 1) and a "
            "sampled LLM judge, whose own reliability is monitored too (Layer 2). SLOs only fire when a breach is "
@@ -72,8 +70,6 @@ with st.container(border=True):
             with st.spinner("Sending traffic and running monitors…"):
                 r = api("POST", "/simulate", json={"n": 40, "fault": fault})
             st.cache_data.clear()
-            if fault != "none":
-                tour_mark("break")
             if r:  # rerun so the tiles above reflect the new traffic; the toast survives via session state
                 st.session_state.fault_toast = (f"{r['generated']} requests · {r['opened']} alert(s) opened, "
                                                 f"{r['resolved']} resolved")

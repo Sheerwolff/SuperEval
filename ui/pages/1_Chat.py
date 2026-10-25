@@ -6,12 +6,10 @@ import httpx
 import streamlit as st
 
 from app.config import settings
-from components import tour_banner, tour_mark
 from lib import eval_badges, setup
 from render import render_chart, render_queries
 
 setup("Ask the analyst", "💬")
-tour_banner("chat")
 
 if "session_id" not in st.session_state:
     st.session_state.session_id = uuid.uuid4().hex[:12]
@@ -144,7 +142,6 @@ with chat_col:
                 render_chart(res)
                 render_queries(res)
                 st.session_state.messages.append({"role": "assistant", "content": res["answer"], "trace": res})
-                tour_mark("chat")
 
     last = next((m for m in reversed(st.session_state.messages) if m.get("trace")), None)
     if last:

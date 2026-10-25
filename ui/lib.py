@@ -56,7 +56,7 @@ def setup(title: str, icon: str = "📊") -> None:
     st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
     with st.sidebar:
         st.markdown("### 🛒 SuperEval")
-        st.caption("A production eval framework to agent answers about Israeli supermarket prices.")
+        st.caption("Production-grade evals for an AI agent answering questions about [Israeli supermarket prices](https://www.gov.il/he/pages/cpfta_prices_regulations).")
         st.caption("Analyst: " + (f"OpenAI `{settings.agent_model}`" if settings.live_llm else "simulated (no API key)")
                    + f" · judge `{settings.judge_model}`")
         theme_switch()

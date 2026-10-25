@@ -11,7 +11,7 @@ short_description: Two-layer eval monitoring for an LLM data-analyst agent
 
 # SuperEval
 
-*A production eval framework to agent answers about Israeli supermarket prices.*
+*Production-grade evals for an AI agent answering questions about [Israeli supermarket prices](https://www.gov.il/he/pages/cpfta_prices_regulations).*
 
 **How I monitor LLM evals in production, including monitoring the LLM judge itself.** It runs on a real agent
 over real data.
@@ -31,7 +31,7 @@ Every answer is evaluated in production in two layers:
 - **Layer 2, the judge:** is the judge still trustworthy? It's checked against ground-truth labels, daily canaries,
   self-consistency, owner judgments and bias checks.
 
-**▶ Live demo:** `https://huggingface.co/spaces/<you>/pricewatch-evals`. Start with the 3-minute guided tour.
+**▶ Live demo:** `https://huggingface.co/spaces/<you>/pricewatch-evals`.
 
 ---
 
@@ -65,7 +65,7 @@ Secondary metrics are sliced by question type and language:
 - sound method, correct declines, stated assumptions
 - latency p95, input mix
 
-## What to try (the guided tour)
+## What to try
 
 1. **Ask the analyst.** Every query streams live. The answer comes with a chart, the SQL behind each number, and its
    eval scorecard.
@@ -172,7 +172,7 @@ Jerusalem) is committed for tests and CI, and the golden set is built from it so
 | `app/traffic/` | Synthetic questions; 30-day backfill with six seeded incidents |
 | `app/api/` | FastAPI service (SSE chat stream, fault injection) and cost guard |
 | `app/data/` | XML parsing, city normalization, ingest, LLM enrichment, snapshot fetch/sample |
-| `ui/` | Streamlit: tour, chat, price explorer, live monitor, traces, judge monitor, golden set, review, architecture |
+| `ui/` | Streamlit: chat, price explorer, live monitor, traces, judge monitor, golden set, review, architecture |
 
 ## Run it locally
 

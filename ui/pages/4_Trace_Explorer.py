@@ -3,12 +3,10 @@ import streamlit as st
 from sqlalchemy import select
 
 from app.db import EvalResult, SessionLocal, Trace
-from components import tour_banner, tour_mark
 from lib import eval_badges, setup
 from render import render_chart, render_queries
 
 setup("Trace explorer", "🔎")
-tour_banner("investigate")
 st.markdown("## 🔎 Trace explorer")
 st.caption("Every answer the analyst gave, with the SQL it ran and every automated verdict. Filter to a failing "
            "check to see exactly what went wrong.")
@@ -46,8 +44,6 @@ event = st.dataframe(table.drop(columns=["id"]), use_container_width=True, hide_
                      selection_mode="single-row", height=300)
 sel = event.selection.rows[0] if event.selection.rows else 0
 trace_id = table.iloc[sel]["id"]
-if failing != "any":
-    tour_mark("investigate")
 
 with SessionLocal() as s:
     t = s.get(Trace, trace_id)

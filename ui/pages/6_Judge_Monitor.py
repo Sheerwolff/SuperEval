@@ -10,11 +10,9 @@ from app.db import Alert, SessionLocal, utcnow
 from app.evals.analyst_judge import RUBRIC_HASH
 from app.evals.calibration import agreement
 from app.evals.judge_monitor import JUDGE_METRICS, canary_runs, load_canaries, load_judge_frame
-from components import tour_banner
 from lib import SEVERITY, base_layout, incident_windows, ink, series, setup, tiles
 
 setup("Judge monitor", "⚖️")
-tour_banner("judge")
 st.markdown("## ⚖️ Judge monitor · Layer 2")
 st.caption("Layer 1 trusts the LLM judge's verdicts about the agent. If the judge silently goes lenient, after a "
            "provider model update or a rubric edit, the agent looks *better* while it isn't. So the judge gets its "
