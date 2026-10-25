@@ -19,8 +19,8 @@ jobs:
       - run: pytest -q
 
   eval-gate:
-    # Offline golden-set regression suite. Fails the PR if the deployed prompt (v1)
-    # drops below the gates in app/evals/offline_runner.py.
+    # Offline golden-set regression suite. Fails the PR if the production prompt
+    # drops below the gates in app/evals/offline_runner.py. v3 is the production prompt.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -30,11 +30,11 @@ jobs:
           cache: pip
       - run: pip install -r requirements.txt
       - name: Offline eval (simulated agent, every PR)
-        run: python -m app.evals.offline_runner --version v1 --gate
+        run: python -m app.evals.offline_runner --version v3 --gate
       - name: Offline eval (live OpenAI agent, when a key is configured)
         if: ${{ env.OPENAI_API_KEY != '' }}
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: python -m app.evals.offline_runner --version v1 --live --limit 20 --gate
+        run: python -m app.evals.offline_runner --version v3 --live --limit 20 --max-cost 0.25 --gate
     env:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}

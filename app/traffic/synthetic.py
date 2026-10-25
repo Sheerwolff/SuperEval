@@ -49,7 +49,8 @@ class Shopper:
         # common words that resolve to a real product sold by >= 3 chains
         self.en_products = []
         for en, he in EN_HE.items():
-            hits = [h for h in catalog.search_products(he, limit=5) if h["sold_by_chains"] >= 3]
+            # the product a shopper asking for "milk" means is what English search ranks first
+            hits = [h for h in catalog.search_products(en, limit=5) if h["sold_by_chains"] >= 3]
             if hits:
                 self.en_products.append((en, he, hits[0]["item_code"]))
         popular = catalog.products[catalog.products.n_chains >= 3]

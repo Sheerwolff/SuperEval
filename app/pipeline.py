@@ -24,13 +24,14 @@ def to_trace(res: AgentResult, source: str, session_id: str | None, created_at: 
     return t
 
 
-def evaluate(trace: Trace, judge: bool | None = None, force_sim_judge: bool = False) -> list[EvalResult]:
+def evaluate(trace: Trace, judge: bool | None = None, force_sim_judge: bool = False,
+             judge_leniency: float = 0.0, judge_model: str = "sim-judge") -> list[EvalResult]:
     det = run_deterministic(trace)
     outcomes = list(det)
     if judge is None:
         judge = random.random() < settings.judge_sample_rate
     if judge:
-        judged = run_judge(trace, det, force_sim=force_sim_judge)
+        judged = run_judge(trace, det, force_sim=force_sim_judge, leniency=judge_leniency, judge_model=judge_model)
         outcomes += judged
         # the trace's cost is the full cost of serving it, evaluation included
         trace.cost_usd = (trace.cost_usd or 0.0) + (judged[0].details.get("cost_usd") or 0.0)
@@ -48,8 +49,9 @@ def handle_question(
     session_id: str | None = None,
     history: list[dict] | None = None,
     force_sim: bool = False,
+    on_event=None,
 ) -> tuple[Trace, list[EvalResult]]:
-    res = run_agent(question, version, history=history, force_sim=force_sim)
+    res = run_agent(question, version, history=history, force_sim=force_sim, on_event=on_event)
     trace = to_trace(res, source, session_id)
     with SessionLocal() as s:
         s.add(trace)

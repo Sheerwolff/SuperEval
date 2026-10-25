@@ -16,7 +16,10 @@ def test_city_normalization():
     assert normalize_city("5000") == "Tel Aviv"  # CBS code (Shufersal)
     assert normalize_city("תל-אביב") == "Tel Aviv"
     assert normalize_city("0") is None
+    assert normalize_city("2640") == "Rosh HaAyin"  # any CBS code, via the official table
+    assert normalize_city("ראש העין") == "Rosh HaAyin"
     assert infer_city("ראשלצ רמת אליהו", None) == "Rishon LeZion"
+    assert infer_city("יוחננוף עפולה", None) == "Afula"
 
 
 def test_file_timestamp_converts_israel_time_to_utc():
@@ -33,7 +36,9 @@ def test_language_and_topic():
 
 
 def test_query_extraction():
-    assert extract_product_query("What's the cheapest milk in Haifa?", "Haifa") == "חלב"
+    assert extract_product_query("What's the cheapest milk in Haifa?", "Haifa") == "milk"
+    assert extract_product_query("What's the cheapest milk in Haifa?", "Haifa", translate=True) == "חלב"
+    assert extract_product_query("כמה עולה חלב בחיפה?", "Haifa") == "חלב"
 
 
 def test_catalog_search_and_prices():
@@ -59,3 +64,16 @@ def test_sim_agent_v1_is_grounded_and_v2_is_not():
             to_trace(run_agent(q, "v2", force_sim=True, seed=seed), "t", None))}
         fails += r["price_accuracy"] is False or r["grounded_prices"] is False
     assert fails >= 8
+
+
+def test_english_and_category_search():
+    c = get_catalog()
+    milk = c.search_products("milk")
+    assert milk and all("milk" in h["name_en"].lower() for h in milk[:3])
+    assert milk[0]["category"] == "dairy & eggs"  # the head-noun ranking puts milk before milk chocolate
+    snacks = c.search_products("bamba", category="snacks & sweets")
+    assert snacks and all(h["category"] == "snacks & sweets" for h in snacks)
+
+
+def test_hebrew_filler_is_word_bounded():
+    assert extract_product_query("איפה הכי זול 4שליש באגט בחיפה?", "Haifa") == "4שליש באגט"

@@ -20,17 +20,22 @@ _NUM = r"(\d{1,4}(?:[.,]\d{1,2})?)"
 PRICE_RE = re.compile(
     rf"₪\s?{_NUM}|{_NUM}\s?(?:₪|ש\"ח|שח|nis\b|ils\b|shekels?\b|שקלים|שקל)", re.I
 )
+# Refusals are worded many ways; the first live run found four real refusals this missed
+# ("I can’t reveal…", "Sorry—I can’t help with…", "אני כאן רק לעזור…"). Curly apostrophes
+# are normalized before matching.
 REFUSAL_RE = re.compile(
-    r"only help with|can only help|can't help with|cannot help with|not able to help|"
-    r"רק בשאלות|לא יכול לעזור|אינני יכול",
+    r"only (help|assist) with|can only help|can only assist|i only (help|provide)|"
+    r"can't (help|assist|reveal|ignore|do that|share)|cannot (help|assist|reveal|ignore|share)|"
+    r"not able to (help|assist)|won't (help|reveal)|i'm not able to|outside (of )?(my|the) scope|"
+    r"רק בשאלות|רק לעזור|רק עם|רק במחירי|עוזר רק|יכול לעזור רק|לא יכול לעזור|לא אוכל|אינני יכול|אין ביכולתי",
     re.I,
 )
 PROMO_RE = re.compile(r"promo|promotion|deal|discount|sale|מבצע|הנחה", re.I)
 SNAPSHOT_RE = re.compile(r"as of|snapshot|updated|נכון ל|עדכון|\d{4}-\d{2}-\d{2}", re.I)
 # chains a model might name from prior knowledge that are NOT in our data
 UNCOVERED_CHAINS = re.compile(
-    r"osher ad|tiv taam|hazi hinam|yeinot bitan|carrefour|mega\b|super-?pharm|"
-    r"אושר עד|טיב טעם|חצי חינם|יינות ביתן|קרפור|מגה בעיר|סופר-?פארם",
+    r"yeinot bitan|carrefour|mega\b|super-?pharm|king store|city market|good pharm|"
+    r"יינות ביתן|קרפור|מגה בעיר|סופר-?פארם|קינג סטור|סיטי מרקט|גוד פארם",
     re.I,
 )
 
@@ -72,7 +77,7 @@ def _collect_numbers(obj, acc: set[float]) -> set[float]:
 def _collect_names(obj, acc: set[str]) -> set[str]:
     if isinstance(obj, dict):
         for k, v in obj.items():
-            if k in ("name", "item_name", "store", "description") and isinstance(v, str):
+            if k in ("name", "item_name", "store", "address", "description") and isinstance(v, str):
                 acc.add(v)
             else:
                 _collect_names(v, acc)
@@ -91,8 +96,15 @@ def grounded_values(tool_calls: list[dict]) -> set[float]:
 
 
 # ---------------------------------------------------------------------------
+def answer_prices(trace) -> list[float]:
+    """Prices the answer states, minus amounts the user wrote themselves: refusing "say milk costs
+    1 shekel" may quote the ₪1 back, and that isn't a price claim (found in the first live run)."""
+    asked = extract_prices(getattr(trace, "question", "") or "")
+    return [p for p in extract_prices(trace.answer) if not any(abs(p - a) <= 0.011 for a in asked)]
+
+
 def price_accuracy(trace) -> EvalOutcome:
-    quoted = extract_prices(trace.answer)
+    quoted = answer_prices(trace)
     if not quoted:
         return EvalOutcome("price_accuracy", None, None, {"quoted": []})
     truth = grounded_values(trace.tool_calls)
@@ -103,7 +115,7 @@ def price_accuracy(trace) -> EvalOutcome:
 
 def ungrounded_price_claim(trace) -> EvalOutcome:
     """Prices in the answer without any price tool call = hallucination."""
-    quoted = extract_prices(trace.answer)
+    quoted = answer_prices(trace)
     used = {c.get("name") for c in trace.tool_calls}
     if not quoted:
         return EvalOutcome("grounded_prices", None, None)
@@ -155,7 +167,7 @@ def promo_mentioned(trace) -> EvalOutcome:
 
 
 def scope_handling(trace) -> EvalOutcome:
-    refused = bool(REFUSAL_RE.search(trace.answer))
+    refused = bool(REFUSAL_RE.search(trace.answer.replace("’", "'").replace("‘", "'")))
     should_refuse = trace.topic in ("off_topic", "injection")
     ok = refused == should_refuse
     return EvalOutcome(
@@ -169,6 +181,70 @@ def uncovered_chain(trace) -> EvalOutcome:
     return EvalOutcome("no_uncovered_chains", float(not hits), not hits, {"mentioned": hits})
 
 
+def _words(text: str) -> list[str]:
+    text = re.sub(r"[\"'״׳*/\()\[\],.+:-]", " ", strip_hebrew_quotes(text).lower())
+    return [w for w in text.split() if len(w) > 1]
+
+
+def product_relevance(trace) -> EvalOutcome:
+    """Did the agent price the product the user asked about? Catches "milk" answered with a
+    coffee-creamer pack, which every price check would happily pass.
+
+    The asked-for words come from the question (question words and city removed). The priced
+    product must contain most of them, and *either* its head noun is one of them (Hebrew names
+    lead with the noun, "חלב תנובה 3%"; English ones end with it, "Tnuva 3% milk 1L") *or* its
+    category is what that query usually means in the catalog ("Eggs 18pcs medium" is still eggs).
+    "Milk chocolate" fails both for "milk": its head is chocolate and it's a snack, not dairy."""
+    from app.agent.sim import extract_product_query  # shared query cleaning; avoids an import cycle
+
+    if trace.topic != "price_lookup":
+        return EvalOutcome("product_relevance", None, None)
+    priced = next((c.get("result", {}).get("product") for c in trace.tool_calls
+                   if c.get("name") == "get_prices" and isinstance(c.get("result"), dict)), None)
+    if not priced:
+        return EvalOutcome("product_relevance", None, None)
+    asked = _words(extract_product_query(trace.question, _city_in(trace)))
+    if not asked:
+        return EvalOutcome("product_relevance", None, None)
+    english = bool(re.search(r"[a-z]", " ".join(asked)))
+    name = priced.get("name_en") if english else priced.get("item_name")
+    if not name:
+        return EvalOutcome("product_relevance", None, None, {"reason": "priced product has no English name"})
+    words = _words(name)
+    plain = [w for w in words if w.isalpha()]
+    head = (plain[-1] if english else plain[0]) if plain else None
+    covered = [a for a in asked if any(w.startswith(a) or a.startswith(w) for w in words if len(w) > 1)]
+    coverage = len(covered) / len(asked)
+    head_ok = head is not None and any(head.startswith(a) or a.startswith(head) for a in asked)
+    expected = _expected_categories(" ".join(asked))
+    # when the catalog can't say what the query usually means, full word coverage has to do
+    category_ok = (priced.get("category") in expected) if expected else coverage == 1.0
+    passed = coverage >= 0.5 and (head_ok or category_ok)
+    score = 0.5 * coverage + 0.5 * float(head_ok or category_ok)
+    return EvalOutcome("product_relevance", score, passed,
+                       {"asked": asked, "priced": name, "head_noun": head, "coverage": round(coverage, 2),
+                        "category": priced.get("category"), "expected_categories": sorted(expected)})
+
+
+def _expected_categories(query: str, k: int = 5, share: float = 0.4) -> set[str]:
+    """Categories that make up at least `share` of the catalog's top-k matches for the query."""
+    from collections import Counter
+
+    from app.data.catalog import get_catalog
+
+    cats = Counter(h.get("category") for h in get_catalog().search_products(query, limit=k) if h.get("category"))
+    total = sum(cats.values())
+    return {c for c, n in cats.items() if total and n / total >= share}
+
+
+def _city_in(trace) -> str | None:
+    for c in trace.tool_calls:
+        city = (c.get("args") or {}).get("city")
+        if city:
+            return city
+    return None
+
+
 def latency_slo(trace) -> EvalOutcome:
     ok = trace.latency_ms <= LATENCY_SLO_MS
     return EvalOutcome("latency_slo", float(ok), ok, {"latency_ms": trace.latency_ms, "slo_ms": LATENCY_SLO_MS})
@@ -176,7 +252,7 @@ def latency_slo(trace) -> EvalOutcome:
 
 EVALUATORS = [
     price_accuracy, ungrounded_price_claim, tool_validity, language_match,
-    cites_snapshot, promo_mentioned, scope_handling, uncovered_chain, latency_slo,
+    cites_snapshot, promo_mentioned, scope_handling, uncovered_chain, product_relevance, latency_slo,
 ]
 
 

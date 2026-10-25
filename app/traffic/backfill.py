@@ -1,4 +1,4 @@
-"""Seed 30 days of production history with four realistic incidents, then replay the
+"""Seed 30 days of production history with five realistic incidents, then replay the
 monitors hour by hour so the alerts table tells the story.
 
     python -m app.traffic.backfill --days 30 --reset
@@ -10,6 +10,9 @@ labelled as such in the UI. The incidents:
   2. Stale feed      day -12 .. -10        Victory ingest fails for ~60h
   3. Latency spike   day -5, 14:00-20:00   upstream LLM slowness, 3x latency
   4. Input drift     day -3                pre-holiday surge of basket questions
+  5. Lenient judge   day -9 .. -6          judge provider model update starts waving through
+                                           ungrounded answers. Layer 1 looks *better*; only
+                                           Layer 2 (canaries, ground-truth recall) catches it.
 """
 from __future__ import annotations
 
@@ -23,7 +26,11 @@ import pandas as pd
 from app.agent.sim import SimAgent
 from app.agent.versions import get_version
 from app.data.catalog import get_catalog
-from app.db import Alert, Base, Deployment, IngestRun, SessionLocal, engine, init_db, utcnow
+from app.db import Alert, Base, Deployment, EvalResult, IngestRun, SessionLocal, engine, init_db, utcnow
+from app.evals import canaries
+from app.evals.deterministic import run_deterministic
+from app.evals.judge import judge_sim
+from app.evals.judge_monitor import judge_frame_from
 from app.monitor.alerts import run_monitors
 from app.monitor.rules import Context
 from app.pipeline import evaluate, to_trace
@@ -36,7 +43,13 @@ INCIDENTS = [
      "title": "Victory price feed failed for ~60h"},
     {"day": -5, "start": 14, "end": 20, "kind": "latency", "title": "Upstream LLM latency degradation (3x)"},
     {"day": -3, "start": 0, "end": 24, "kind": "drift", "title": "Pre-holiday surge of basket questions"},
+    {"day": -9, "start": 9, "end": 9 + 72, "kind": "judge_lenient", "layer": "judge",
+     "title": "Judge model update made the judge lenient; pinned back to the previous model"},
 ]
+JUDGE_MODEL = "gpt-5-mini (sim)"
+JUDGE_MODEL_UPDATED = "gpt-5-mini-2026-10 (sim)"
+JUDGE_LENIENCY = 0.85
+REPEAT_RATE = 0.1  # share of judged traces judged a second time (self-consistency)
 
 
 def hourly_volume(ts: datetime) -> float:
@@ -69,7 +82,7 @@ def run(days: int = 30, reset: bool = False, seed: int = 42) -> dict:
     now = utcnow().replace(minute=0, second=0, microsecond=0)
     today = now.replace(hour=0)
     start = today - timedelta(days=days)
-    bad, stale, slow, drift = INCIDENTS
+    bad, stale, slow, drift, lenient = INCIDENTS
 
     traces, evals = [], []
     with SessionLocal() as s:
@@ -98,6 +111,9 @@ def run(days: int = 30, reset: bool = False, seed: int = 42) -> dict:
     while ts < now:
         version = "v2" if _in(ts, today, bad) else "v1"
         mult = 3.0 if _in(ts, today, slow) else 1.0
+        judge_bad = _in(ts, today, lenient)
+        judge_kw = {"judge_leniency": JUDGE_LENIENCY if judge_bad else 0.0,
+                    "judge_model": JUDGE_MODEL_UPDATED if judge_bad else JUDGE_MODEL}
         mix = DEFAULT_MIX
         if _in(ts, today, drift):
             mix = {"price_lookup": 0.35, "basket": 0.50, "stores": 0.05, "off_topic": 0.06, "injection": 0.04}
@@ -108,7 +124,13 @@ def run(days: int = 30, reset: bool = False, seed: int = 42) -> dict:
                             latency_multiplier=mult)
             created = ts + timedelta(seconds=rng.randrange(3600))
             t = to_trace(res, "backfill", f"sim-{rng.randrange(400)}", created_at=created)
-            ev = evaluate(t, judge=rng.random() < 0.5, force_sim_judge=True)
+            ev = evaluate(t, judge=True, force_sim_judge=True, **judge_kw)
+            if rng.random() < REPEAT_RATE:
+                verdict, meta = judge_sim(t.id + "#repeat", run_deterministic(t), judge_kw["judge_leniency"],
+                                          judge_kw["judge_model"])
+                ev.append(EvalResult(evaluator="judge_repeat", kind="judge_meta", created_at=t.created_at,
+                                     score=(verdict.groundedness - 1) / 4, passed=verdict.groundedness >= 4,
+                                     details=meta))
             for e in ev:
                 e.trace_id = t.id
             traces.append(t)
@@ -121,6 +143,23 @@ def run(days: int = 30, reset: bool = False, seed: int = 42) -> dict:
         s.add_all(evals)
         s.commit()
 
+    # daily judge canary runs at 06:30
+    with SessionLocal() as s:
+        for d in range(days + 1):
+            at = start + timedelta(days=d, hours=6, minutes=30)
+            if at > now:
+                break
+            judge_bad = _in(at, today, lenient)
+            canaries.run(live=False, at=at, leniency=JUDGE_LENIENCY if judge_bad else 0.0,
+                         judge_model=JUDGE_MODEL_UPDATED if judge_bad else JUDGE_MODEL, session=s)
+        d0 = today + timedelta(days=lenient["day"])
+        s.add(Deployment(created_at=d0 + timedelta(hours=lenient["end"]), agent_version="v1",
+                         note=f"judge pinned back to {JUDGE_MODEL} after canary alert (agent unchanged)"))
+        # the seeded month ran v1; v3 (fixes from the first live golden-set run) goes live now
+        s.add(Deployment(created_at=now, agent_version="v3",
+                         note="v3: decisive on generic requests, batched basket searches (golden-set triage)"))
+        s.commit()
+
     # replay monitors hourly on in-memory frames (fast) so alerts open/resolve at the right times
     tr_df = pd.DataFrame([{
         "id": t.id, "created_at": t.created_at, "source": t.source, "agent_version": t.agent_version,
@@ -130,14 +169,20 @@ def run(days: int = 30, reset: bool = False, seed: int = 42) -> dict:
     by_id = tr_df.set_index("id")
     ev_df = pd.DataFrame([{
         "trace_id": e.trace_id, "created_at": e.created_at, "evaluator": e.evaluator, "kind": e.kind,
-        "score": e.score, "passed": e.passed,
+        "score": e.score, "passed": e.passed, "details": e.details if e.kind != "deterministic" else None,
     } for e in evals])
     for col in ("agent_version", "language", "topic", "source"):
         ev_df[col] = ev_df.trace_id.map(by_id[col])
     tr_df["created_at"] = pd.to_datetime(tr_df.created_at)
     ev_df["created_at"] = pd.to_datetime(ev_df.created_at)
+    tr_df["answer_len"] = [len(t.answer) for t in traces]
+    judge_df = judge_frame_from(ev_df, tr_df)
+    judge_df["created_at"] = pd.to_datetime(judge_df.created_at)
 
+    from app.evals.judge_monitor import load_canaries
     from app.monitor.alerts import deployed_as_of, freshness_as_of
+
+    canary_df = load_canaries(start)
 
     ts = start + timedelta(days=1)
     with SessionLocal() as s:
@@ -150,6 +195,8 @@ def run(days: int = 30, reset: bool = False, seed: int = 42) -> dict:
                 freshness=freshness_as_of(s, ts),
                 spend_today=0.0, budget=0.0, freshness_sla_hours=36,
                 deployed=deployed_as_of(s, ts),
+                judge=judge_df[(judge_df.created_at >= lo) & (judge_df.created_at < ts)],
+                canaries=canary_df[(canary_df.created_at >= ts - timedelta(days=2)) & (canary_df.created_at < ts)],
             )
             run_monitors(ts, notify=False, ctx=ctx)
             ts += timedelta(hours=1)

@@ -3,16 +3,20 @@ import streamlit as st
 from sqlalchemy import select
 
 from app.db import EvalResult, SessionLocal, Trace
+from components import tour_banner, tour_mark
 from lib import eval_badges, setup
 
 setup("Trace explorer", "🔎")
+tour_banner("investigate")
 st.markdown("## 🔎 Trace explorer")
 
 f1, f2, f3, f4 = st.columns(4)
 version = f1.selectbox("Version", ["any", "v1", "v2"])
 source = f2.selectbox("Source", ["any", "user", "synthetic", "backfill"])
-failing = f3.selectbox("Failing evaluator", ["any", "price_accuracy", "grounded_prices", "language_match",
-                                             "scope_handling", "tool_use", "promo_mentioned", "judge_helpfulness"])
+FAILING = ["any", "price_accuracy", "grounded_prices", "product_relevance", "language_match", "scope_handling",
+           "tool_use", "promo_mentioned", "judge_helpfulness", "judge_groundedness", "judge_relevance"]
+preset = st.session_state.pop("trace_filter_failing", None)
+failing = f3.selectbox("Failing evaluator", FAILING, index=FAILING.index(preset) if preset in FAILING else 0)
 topic = f4.selectbox("Topic", ["any", "price_lookup", "basket", "stores", "off_topic", "injection"])
 
 with SessionLocal() as s:
@@ -49,6 +53,8 @@ with SessionLocal() as s:
     evals = [{"evaluator": e.evaluator, "kind": e.kind, "score": e.score, "passed": e.passed, "details": e.details}
              for e in t.evals]
 
+if failing != "any":
+    tour_mark("investigate")
 st.divider()
 a, b = st.columns([3, 2], gap="large")
 with a:

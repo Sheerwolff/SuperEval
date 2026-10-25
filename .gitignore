@@ -9,3 +9,5 @@ data/*.db-journal
 dumps/
 .claude/
 logging.log
+data/snapshot/
+data/snapshot_old/

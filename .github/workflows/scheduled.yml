@@ -17,9 +17,10 @@ jobs:
   ingest:
     if: github.event.schedule == '15 5 * * *' || github.event.inputs.job == 'ingest'
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 60
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -29,14 +30,27 @@ jobs:
       - run: pip install -r requirements-ingest.txt
       - name: Download and normalize today's prices
         run: python -m app.data.ingest --out data/snapshot
+      - name: English names and categories for new products (cached; pennies a day)
+        if: ${{ env.OPENAI_API_KEY != '' }}
+        run: python -m app.data.enrich --snapshot data/snapshot
       - name: Record the ingest run (feeds the freshness monitor)
         run: python -m app.jobs record-ingest
-      - name: Commit the new snapshot
+        env:
+          SNAPSHOT_DIR: data/snapshot
+      - name: Publish the snapshot as the `snapshot-latest` release asset (overwritten, no history)
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
+          tar czf snapshot.tar.gz -C data/snapshot .
+          gh release view snapshot-latest >/dev/null 2>&1 ||             gh release create snapshot-latest --title "Latest price snapshot" --notes "Overwritten daily by the ingest job."
+          gh release upload snapshot-latest snapshot.tar.gz data/snapshot/meta.json --clobber
+      - name: Commit the enrichment cache and refreshed sample
+        run: |
+          python -m app.data.make_sample
           git config user.name "pricewatch-bot"
           git config user.email "pricewatch-bot@users.noreply.github.com"
-          git add data/snapshot
-          git diff --cached --quiet || git commit -m "data: price snapshot $(date -u +%F)"
+          git add data/reference data/sample
+          git diff --cached --quiet || git commit -m "data: enrichment cache + sample $(date -u +%F)"
           git push
 
   traffic:
@@ -54,8 +68,16 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -r requirements.txt
+      - name: Latest snapshot
+        run: python -m app.data.fetch_snapshot ${{ github.repository }}
       - name: Synthetic shoppers (simulated) + monitors
         run: python -m app.jobs traffic --n 12
       - name: A few through the real agent, so live metrics keep flowing
         if: ${{ env.OPENAI_API_KEY != '' }}
         run: python -m app.jobs traffic --n 2 --live
+      - name: Layer 2 - judge canaries (once a day)
+        if: ${{ env.OPENAI_API_KEY != '' && github.event.schedule == '*/30 * * * *' }}
+        run: |
+          if [ "$(date -u +%H%M)" \< "0630" ] && [ "$(date -u +%H%M)" \> "0559" ]; then
+            python -m app.evals.canaries --run
+          fi

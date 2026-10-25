@@ -20,6 +20,7 @@ class Firing:
     threshold: float | None
     message: str
     agent_version: str | None = None
+    layer: str = "agent"  # agent = layer 1, judge = layer 2
 
     @property
     def key(self) -> tuple:
@@ -36,6 +37,9 @@ class Context:
     budget: float
     freshness_sla_hours: float
     deployed: str | None = None  # version live at `now`; SLOs are judged on what is serving
+    judge: pd.DataFrame | None = None  # layer 2: one row per judged trace (judge_monitor.judge_frame_from)
+    canaries: pd.DataFrame | None = None  # layer 2: canary results
+    kappa: dict | None = None  # layer 2: judge vs human labels (calibration.agreement)
 
 
 def _window(df: pd.DataFrame, now: datetime, start: timedelta, end: timedelta = timedelta(0)) -> pd.DataFrame:
@@ -231,11 +235,133 @@ class BudgetRule:
         )]
 
 
+# ---- Layer 2: rules about the judge ---------------------------------------------
+@dataclass
+class JudgeRateRule:
+    """SLO on a judge-quality rate (Wilson-gated, like the agent SLOs)."""
+
+    metric: str  # key of judge_monitor.JUDGE_METRICS
+    op: str
+    threshold: float
+    window: timedelta
+    min_n: int
+    severity: str = "critical"
+    confidence: float = 0.99
+
+    @property
+    def name(self) -> str:
+        return f"judge:{self.metric}"
+
+    def check(self, ctx: Context) -> list[Firing]:
+        from app.evals.judge_monitor import JUDGE_METRICS
+
+        if ctx.judge is None or ctx.judge.empty:
+            return []
+        label, fn = JUDGE_METRICS[self.metric]
+        val, n = fn(_window(ctx.judge, ctx.now, self.window))
+        if val is None or n < self.min_n:
+            return []
+        lo, hi = wilson(val, n, self.confidence)
+        bad = hi < self.threshold if self.op == "<" else lo > self.threshold
+        if not bad:
+            return []
+        return [Firing(
+            self.name, self.metric, self.severity, val, self.threshold,
+            f"Judge: {label.lower()} is {val:.0%} over the last {_dur(self.window)} "
+            f"(SLO {self.op} {self.threshold:.0%}, n={n}, {self.confidence:.0%} CI {lo:.0%}-{hi:.0%}). "
+            "Layer-1 judge scores may be unreliable.",
+            layer="judge",
+        )]
+
+
+@dataclass
+class CanaryRule:
+    """The judge got known cases wrong in its latest canary run."""
+
+    threshold: float = 0.85
+    max_age: timedelta = timedelta(hours=36)
+    severity: str = "critical"
+    name: str = "judge:canaries"
+
+    def check(self, ctx: Context) -> list[Firing]:
+        from app.evals.judge_monitor import canary_runs
+
+        if ctx.canaries is None or ctx.canaries.empty:
+            return []
+        runs = canary_runs(ctx.canaries[(ctx.canaries.created_at <= ctx.now)
+                                        & (ctx.canaries.created_at >= ctx.now - self.max_age)])
+        if runs.empty:
+            return []
+        last = runs.iloc[-1]
+        if last.accuracy >= self.threshold:
+            return []
+        wrong = int(round((1 - last.accuracy) * last.checks))
+        return [Firing(
+            self.name, "canary_accuracy", self.severity, float(last.accuracy), self.threshold,
+            f"Judge got {wrong} of {int(last.checks)} canary checks wrong ({last.accuracy:.0%} accuracy, "
+            f"SLO ≥ {self.threshold:.0%}) with judge model {last.judge_model}. The judge changed, not the agent.",
+            layer="judge",
+        )]
+
+
+@dataclass
+class KappaRule:
+    min_n: int = 30
+    threshold: float = 0.6
+    severity: str = "warn"
+    name: str = "judge:human_kappa"
+
+    def check(self, ctx: Context) -> list[Firing]:
+        k = ctx.kappa or {}
+        out = []
+        for dim in ("helpful", "grounded"):
+            r = k.get(dim)
+            if k.get("n", 0) >= self.min_n and r and r["kappa"] is not None and r["kappa"] < self.threshold:
+                out.append(Firing(
+                    self.name, f"kappa_{dim}", self.severity, r["kappa"], self.threshold,
+                    f"Judge vs human agreement on '{dim}' is κ = {r['kappa']:.2f} (n={k['n']}, target ≥ "
+                    f"{self.threshold}). Revisit the rubric before trusting judge trends.",
+                    layer="judge",
+                ))
+        return out
+
+
+@dataclass
+class JudgeScoreDriftRule:
+    """Judge helpfulness distribution moved while the deployed agent version didn't."""
+
+    threshold: float = 0.25
+    window: timedelta = timedelta(hours=24)
+    baseline: timedelta = timedelta(days=7)
+    min_n: int = 120
+    severity: str = "info"
+    name: str = "judge:score_drift"
+
+    def check(self, ctx: Context) -> list[Firing]:
+        j = ctx.judge
+        if j is None or j.empty:
+            return []
+        if ctx.deployed:
+            j = j[j.agent_version == ctx.deployed]
+        j = j[j.help_raw.notna()]
+        cur = _window(j, ctx.now, self.window)
+        base = _window(j, ctx.now, self.baseline + self.window, self.window)
+        if len(cur) < self.min_n or len(base) < self.min_n:
+            return []
+        value = psi(base.help_raw.astype(int), cur.help_raw.astype(int))
+        if value <= self.threshold:
+            return []
+        return [Firing(self.name, "psi_judge_helpfulness", self.severity, value, self.threshold,
+                       f"Judge helpfulness scores shifted (PSI = {value:.2f}) with the same agent version deployed.",
+                       layer="judge")]
+
+
 DEFAULT_RULES = [
     ThresholdRule("price_accuracy", "<", 0.95),
     ThresholdRule("grounded_prices", "<", 0.95),
     ThresholdRule("scope_handling", "<", 0.90, severity="warn"),
     ThresholdRule("language_match", "<", 0.90, severity="warn"),
+    ThresholdRule("product_relevance", "<", 0.80, severity="warn"),
     ThresholdRule("latency_p95_ms", ">", 8000, severity="warn"),
     ThresholdRule("error_rate", ">", 0.05),
     ZScoreRule("judge_helpfulness"),
@@ -244,6 +370,13 @@ DEFAULT_RULES = [
     PSIDriftRule("language"),
     FreshnessRule(),
     BudgetRule(),
+    # layer 2: the judge
+    JudgeRateRule("judge_recall_on_bad", "<", 0.80, window=timedelta(hours=72), min_n=10),
+    JudgeRateRule("judge_flip_rate", ">", 0.15, window=timedelta(days=7), min_n=20, severity="warn"),
+    JudgeRateRule("judge_error_rate", ">", 0.05, window=timedelta(hours=3), min_n=20, severity="warn"),
+    CanaryRule(),
+    KappaRule(),
+    JudgeScoreDriftRule(),
 ]
 
 

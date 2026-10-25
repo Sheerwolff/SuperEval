@@ -19,6 +19,7 @@ class AgentVersion:
     description: str
     system_template: str
     temperature: float
+    max_steps: int = 6
 
     @property
     def prompt_hash(self) -> str:
@@ -43,6 +44,7 @@ def load_versions() -> dict[str, AgentVersion]:
             description=raw["description"].strip(),
             system_template=raw["system"],
             temperature=float(raw.get("model_settings", {}).get("temperature", 0.2)),
+            max_steps=int(raw.get("model_settings", {}).get("max_steps", 6)),
         )
     return out
 

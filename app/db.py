@@ -89,6 +89,25 @@ class Alert(Base):
     message: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(12), default="open")  # open | resolved
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime)
+    layer: Mapped[str] = mapped_column(String(8), default="agent")  # agent (layer 1) | judge (layer 2)
+
+
+class JudgeCanaryResult(Base):
+    """One canary item judged in one canary run (Layer 2: is the judge still right on known cases?)."""
+
+    __tablename__ = "judge_canary_results"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+    run_id: Mapped[str] = mapped_column(String(36), index=True)
+    canary_id: Mapped[str] = mapped_column(String(16))
+    kind: Mapped[str] = mapped_column(String(24))  # what the canary tests, e.g. wrong_price
+    dimension: Mapped[str] = mapped_column(String(16))  # groundedness | relevance | scope
+    expected: Mapped[bool] = mapped_column(Boolean)
+    got: Mapped[bool | None] = mapped_column(Boolean)
+    correct: Mapped[bool] = mapped_column(Boolean)
+    judge_model: Mapped[str] = mapped_column(String(64))
+    reasoning: Mapped[str | None] = mapped_column(Text)
 
 
 class Deployment(Base):

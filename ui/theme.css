@@ -1,16 +1,18 @@
+/* Theme-neutral tokens: translucent surfaces and inherited text color, so custom HTML matches
+   whichever theme (light or dark) Streamlit is actually rendering. */
 :root {
-  --pw-surface: #fcfcfb;
-  --pw-page: #f9f9f7;
-  --pw-ink: #0b0b0b;
-  --pw-ink-2: #52514e;
+  --pw-surface: rgba(128, 128, 128, 0.07);
+  --pw-ink: inherit;
+  --pw-ink-2: inherit;
   --pw-muted: #898781;
-  --pw-border: rgba(11, 11, 11, 0.10);
+  --pw-border: rgba(128, 128, 128, 0.28);
   --pw-good: #0ca30c;
-  --pw-good-text: #006300;
+  --pw-good-text: #0a8f0a;
   --pw-critical: #d03b3b;
   --pw-v1: #2a78d6;
   --pw-v2: #eb6834;
 }
+.hero p, .tile .label, .connect-text p, .tour-hint, .alert-row { opacity: 0.88; }
 
 .block-container { padding-top: 2rem; max-width: 1280px; }
 h1, h2, h3 { letter-spacing: -0.01em; }
@@ -34,6 +36,7 @@ h1, h2, h3 { letter-spacing: -0.01em; }
 .pill { border-radius: 999px; padding: 1px 9px; font-size: 0.8rem; font-weight: 600; color: white; }
 .pill-v1 { background: var(--pw-v1); }
 .pill-v2 { background: var(--pw-v2); }
+.pill-v3 { background: #0f7a54; }
 
 .chip {
   display: inline-block; border-radius: 6px; padding: 1px 7px; margin: 2px 2px 0 0;
@@ -54,3 +57,43 @@ h1, h2, h3 { letter-spacing: -0.01em; }
 
 .rtl { direction: rtl; text-align: right; }
 .muted { color: var(--pw-muted); }
+
+/* ---- let's connect ---- */
+.connect-card {
+  display: flex; flex-wrap: wrap; gap: 16px; align-items: center; justify-content: space-between;
+  border: 1px solid var(--pw-border); border-radius: 14px; padding: 18px 20px; margin: 8px 0 16px;
+  background: linear-gradient(135deg, rgba(42, 120, 214, 0.08), rgba(42, 120, 214, 0.02));
+}
+.connect-text { flex: 1 1 320px; min-width: 0; }
+.connect-kicker { font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--pw-v1); font-weight: 600; }
+.connect-name { font-size: 1.35rem; font-weight: 650; color: var(--pw-ink); margin: 2px 0 4px; }
+.connect-text p { color: var(--pw-ink-2); margin: 0; font-size: 0.95rem; }
+.connect-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.connect-btn {
+  display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px;
+  border: 1px solid var(--pw-border); background: var(--pw-surface); color: var(--pw-ink) !important;
+  text-decoration: none !important; font-weight: 550; font-size: 0.9rem;
+}
+.connect-btn:hover { border-color: currentColor; }
+.connect-btn svg, .connect-icon svg { width: 18px; height: 18px; }
+.connect-linkedin svg { color: #0a66c2; }
+.connect-whatsapp svg { color: #25d366; }
+.connect-email svg { color: var(--pw-ink-2); }
+.connect-compact { display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  color: var(--pw-muted); font-size: 0.8rem; }
+.connect-compact div { display: flex; gap: 10px; }
+.connect-icon { color: var(--pw-ink-2) !important; display: inline-flex; }
+
+/* ---- tour ---- */
+.tour-kicker { font-size: 0.75rem; color: var(--pw-v1); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+.tour-title { font-weight: 650; font-size: 1.05rem; color: var(--pw-ink); }
+.tour-hint { color: var(--pw-ink-2); font-size: 0.9rem; }
+
+/* ---- responsive tiles ---- */
+.tile-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 4px 0 8px; }
+@media (max-width: 640px) {
+  .tile-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tile .value { font-size: 1.35rem; }
+  .hero h1 { font-size: 1.7rem; }
+  .block-container { padding-left: 1rem; padding-right: 1rem; padding-top: 1rem; }
+}

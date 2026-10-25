@@ -22,15 +22,16 @@ wins = []
 for inc in INCIDENTS:
     d0 = today + timedelta(days=inc["day"])
     wins.append((inc["kind"], d0 + timedelta(hours=inc["start"]), d0 + timedelta(hours=inc["end"] + 6)))
-caught, fp = set(), []
+caught, fp = {}, []
 with SessionLocal() as s:
-    for a in s.query(Alert):
+    for a in s.query(Alert).order_by(Alert.created_at):
         hit = [k for k, lo, hi in wins if lo <= a.created_at <= hi]
-        if hit:
-            caught.update(hit)
-        else:
+        for k in hit:
+            caught.setdefault(k, []).append(f"{a.layer}:{a.rule}")
+        if not hit:
             fp.append(f"{a.created_at:%m-%d %H:%M} {a.rule} {a.agent_version or ''}")
-print(f"caught {len(caught)}/{len(wins)} incidents, {len(fp)} false positive(s) {fp}")
+by = "; ".join(f"{k} <- {sorted(set(v))}" for k, v in caught.items())
+print(f"caught {len(caught)}/{len(wins)} incidents, {len(fp)} false positive(s) {fp} | {by}")
 """
 
 

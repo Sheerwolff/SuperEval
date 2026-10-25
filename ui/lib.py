@@ -16,11 +16,37 @@ from app.config import settings  # noqa: E402
 from app.db import init_db, utcnow  # noqa: E402
 from app.monitor.aggregates import METRIC_LABELS, load_evals, load_traces, metric_value, timeseries  # noqa: E402
 
-# reference palette (validated categorical order; status colors reserved for state)
-SERIES = {"v1": "#2a78d6", "v2": "#eb6834", "all": "#2a78d6"}
+# Reference palette (validated categorical order; status colors reserved for state).
+# Dark mode uses the same hues stepped for the dark surface, not an automatic flip.
+_SERIES = {
+    "light": {"v1": "#2a78d6", "v2": "#eb6834", "v3": "#1baf7a", "all": "#2a78d6"},
+    "dark": {"v1": "#3987e5", "v2": "#d95926", "v3": "#199e70", "all": "#3987e5"},
+}
+CATEGORICAL = {
+    "light": ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"],
+    "dark": ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767"],
+}
 STATUS = {"good": "#0ca30c", "warning": "#fab219", "serious": "#ec835a", "critical": "#d03b3b"}
 SEVERITY = {"critical": ("critical", "🔴"), "warn": ("serious", "🟠"), "info": ("warning", "🟡")}
-INK = {"primary": "#0b0b0b", "secondary": "#52514e", "muted": "#898781", "grid": "#e1e0d9", "axis": "#c3c2b7"}
+
+
+def mode() -> str:
+    try:
+        return "dark" if st.context.theme.type == "dark" else "light"
+    except Exception:
+        return "light"
+
+
+def ink() -> dict:
+    """Chart chrome that reads on both light and dark backgrounds (Streamlit decides the theme
+    client-side, so the server can't reliably know it)."""
+    return {"primary": "#898781", "secondary": "#898781", "muted": "#898781", "grid": "rgba(128,128,128,0.18)",
+            "axis": "rgba(128,128,128,0.45)", "surface": "rgba(0,0,0,0)", "band": "rgba(128,128,128,0.18)"}
+
+
+def series() -> dict:
+    # mode() only drives series hues; both steps read on either background
+    return _SERIES[mode()]
 
 
 def setup(title: str, icon: str = "📊") -> None:
@@ -36,6 +62,49 @@ def setup(title: str, icon: str = "📊") -> None:
             v = dep["current"]
             st.markdown(f"**Live version:** <span class='pill pill-{v}'>{v}</span>", unsafe_allow_html=True)
         st.caption("LLM: " + (f"OpenAI `{settings.agent_model}`" if settings.live_llm else "simulated (no API key)"))
+        theme_switch()
+        st.divider()
+        from components import connect_compact
+
+        connect_compact()
+
+
+PAGES = ["", "Chat", "Price_Explorer", "Live_Monitor", "Trace_Explorer", "Version_Compare", "Judge_Monitor",
+         "Data_Health", "Architecture"]
+THEMES = {"☀️ Light": "Light", "🌙 Dark": "Dark", "💻 Auto": "System"}
+
+
+def theme_switch() -> None:
+    """Explicit theme control. Streamlit has no API to change the theme from Python, but it keeps the
+    visitor's choice in localStorage ("stActiveTheme-/<page>-v2"), so we write that for every page and
+    reload. Needs both [theme.light] and [theme.dark] in .streamlit/config.toml."""
+    current = "🌙 Dark" if mode() == "dark" else "☀️ Light"
+    choice = st.segmented_control("Theme", list(THEMES), default=current, key="pw_theme",
+                                  label_visibility="collapsed")
+    if choice and choice != current and st.session_state.get("pw_theme_applied") != choice:
+        st.session_state.pw_theme_applied = choice
+        value = THEMES[choice]
+        keys = [f"stActiveTheme-/{p}-v2" for p in PAGES]
+        import streamlit.components.v1 as components
+
+        components.html(
+            "<script>const ls = window.parent.localStorage;"
+            f"for (const k of {keys!r}) ls.setItem(k, JSON.stringify({value!r}));"
+            "for (const k of Object.keys(ls)) if (k.startsWith('stActiveTheme')) "
+            f"ls.setItem(k, JSON.stringify({value!r}));"
+            "window.parent.location.reload();</script>",
+            height=0,
+        )
+
+
+def tiles(items: list[tuple[str, str, str, bool]]) -> None:
+    """KPI tiles as a wrapping grid (reflows to 2 columns on phones). items: (label, value, sub, bad)."""
+    html = "".join(
+        f"<div class='tile{' bad' if bad else ''}'><div class='label'>{label}</div>"
+        f"<div class='value'>{value}</div><div class='sub'>{sub}</div></div>"
+        for label, value, sub, bad in items
+    )
+    st.markdown(f"<div class='tile-grid'>{html}</div>", unsafe_allow_html=True)
 
 
 # ---- API ---------------------------------------------------------------
@@ -82,16 +151,17 @@ def fmt(metric: str, v: float | None) -> str:
 
 # ---- charts ----------------------------------------------------------------
 def base_layout(fig: go.Figure, height: int = 260, y_pct: bool = False, title: str | None = None) -> go.Figure:
+    INK = ink()
     fig.update_layout(
         height=height,
         margin=dict(l=8, r=8, t=36 if title else 8, b=8),
-        title=dict(text=title, font=dict(size=14, color=INK["primary"]), x=0, xanchor="left") if title else None,
+        title=dict(text=title, font=dict(size=14), x=0, xanchor="left") if title else None,
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(family="system-ui, -apple-system, Segoe UI, sans-serif", size=12, color=INK["secondary"]),
+        font=dict(family="system-ui, -apple-system, Segoe UI, sans-serif", size=12),
         hovermode="x unified",
         legend=dict(orientation="h", yanchor="bottom", y=1.0, xanchor="right", x=1, title=None),
-        hoverlabel=dict(bgcolor="white", font_size=12),
+        hoverlabel=dict(font_size=12),
     )
     fig.update_xaxes(showgrid=False, linecolor=INK["axis"], tickfont=dict(color=INK["muted"]))
     fig.update_yaxes(gridcolor=INK["grid"], zeroline=False, tickfont=dict(color=INK["muted"]),
@@ -103,6 +173,7 @@ def metric_chart(metric: str, evals: pd.DataFrame, traces: pd.DataFrame, freq: s
                  by_version: bool = True, height: int = 240, threshold: float | None = None,
                  incidents: list[dict] | None = None) -> go.Figure:
     ts = timeseries(metric, evals, traces, freq=freq, by="agent_version" if by_version else None)
+    INK, SERIES = ink(), series()
     fig = go.Figure()
     pct = metric not in ("latency_p95_ms", "cost_per_request") and not metric.startswith("judge_")
     if not ts.empty:
@@ -129,9 +200,8 @@ def metric_chart(metric: str, evals: pd.DataFrame, traces: pd.DataFrame, freq: s
                       annotation_text="SLO", annotation_position="top left",
                       annotation_font=dict(color=INK["muted"], size=11))
     for inc in incidents or []:
-        fig.add_vrect(x0=inc["start"], x1=inc["end"], fillcolor=INK["grid"], opacity=0.5, line_width=0,
-                      annotation_text=inc.get("short", ""), annotation_position="top left",
-                      annotation_font=dict(size=10, color=INK["muted"]))
+        # bands only; labels collide at dashboard widths, so pages list incidents in a caption
+        fig.add_vrect(x0=inc["start"], x1=inc["end"], fillcolor=INK["band"], opacity=0.6, line_width=0)
     base_layout(fig, height=height, y_pct=pct, title=METRIC_LABELS.get(metric, metric))
     if metric.endswith("_ms"):
         fig.update_yaxes(ticksuffix="s")
@@ -143,7 +213,8 @@ def incident_windows() -> list[dict]:
     from app.traffic.backfill import INCIDENTS
 
     today = utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
-    short = {"bad_deploy": "bad deploy", "stale_feed": "stale feed", "latency": "latency", "drift": "drift"}
+    short = {"bad_deploy": "bad deploy", "stale_feed": "stale feed", "latency": "latency", "drift": "drift",
+             "judge_lenient": "lenient judge"}
     out = []
     for inc in INCIDENTS:
         d0 = today + timedelta(days=inc["day"])

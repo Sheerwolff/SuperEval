@@ -10,6 +10,8 @@ from sqlalchemy import func, select
 
 from app.config import settings
 from app.db import Alert, Deployment, IngestRun, SessionLocal, Trace, utcnow
+from app.evals.calibration import agreement
+from app.evals.judge_monitor import load_canaries, load_judge_frame
 from app.monitor.aggregates import load_evals, load_traces
 from app.monitor.rules import DEFAULT_RULES, Context, Firing
 
@@ -56,6 +58,9 @@ def build_context(session, now: datetime) -> Context:
         budget=settings.daily_budget_usd,
         freshness_sla_hours=settings.freshness_sla_hours,
         deployed=deployed_as_of(session, now),
+        judge=load_judge_frame(now - timedelta(days=8), now, session=session),
+        canaries=load_canaries(now - timedelta(days=2), now, session=session),
+        kappa=agreement(),
     )
 
 
@@ -79,7 +84,7 @@ def run_monitors(now: datetime | None = None, notify: bool = True, ctx: Context 
                 a = open_by_key[key]
                 a.value, a.message = f.value, f.message
                 continue
-            a = Alert(created_at=now, rule=f.rule, severity=f.severity, metric=f.metric,
+            a = Alert(created_at=now, rule=f.rule, severity=f.severity, metric=f.metric, layer=f.layer,
                       agent_version=f.agent_version, value=f.value, threshold=f.threshold, message=f.message)
             s.add(a)
             opened.append(a)

@@ -17,8 +17,10 @@ METRICS = {
     "scope_handling": ("scope_handling", "rate"),
     "cites_snapshot": ("cites_snapshot", "rate"),
     "promo_mentioned": ("promo_mentioned", "rate"),
+    "product_relevance": ("product_relevance", "rate"),
     "judge_helpfulness": ("judge_helpfulness", "mean"),
     "judge_groundedness": ("judge_groundedness", "mean"),
+    "judge_relevance": ("judge_relevance", "rate"),
 }
 METRIC_LABELS = {
     "price_accuracy": "Price accuracy",
@@ -28,6 +30,8 @@ METRIC_LABELS = {
     "scope_handling": "Scope handling",
     "cites_snapshot": "Cites data date",
     "promo_mentioned": "Mentions promos",
+    "product_relevance": "Right product",
+    "judge_relevance": "Judge: right product",
     "judge_helpfulness": "Judge: helpfulness",
     "judge_groundedness": "Judge: groundedness",
     "latency_p95_ms": "Latency p95 (ms)",

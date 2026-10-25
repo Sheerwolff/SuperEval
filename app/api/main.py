@@ -5,12 +5,14 @@
 from __future__ import annotations
 
 import json
+import queue
 import random
 import threading
 import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
@@ -110,6 +112,39 @@ def chat(body: ChatIn, request: Request):
                                    history=history, force_sim=(mode == "sim"))
     maybe_run_monitors()
     return {"mode": mode, "mode_reason": reason, **_trace_json(trace, evals)}
+
+
+@app.post("/chat/stream")
+def chat_stream(body: ChatIn, request: Request):
+    """Server-sent events: one `tool_start`/`tool_end` per tool call as the agent works, then `done`
+    with the full trace and its evals (same payload as /chat)."""
+    key = f"{body.session_id}:{request.client.host if request.client else '-'}"
+    mode, reason = guard.mode_for(key)
+    with SessionLocal() as s:
+        version = current_version(s)
+    history = [m for m in body.history if m.get("role") in ("user", "assistant")][-6:]
+    events: queue.Queue = queue.Queue()
+
+    def work():
+        try:
+            trace, evals = handle_question(body.question, version, source="user", session_id=body.session_id,
+                                           history=history, force_sim=(mode == "sim"), on_event=events.put)
+            events.put({"type": "done", "mode": mode, "mode_reason": reason, **_trace_json(trace, evals)})
+        except Exception as exc:  # surface failures to the client instead of hanging the stream
+            events.put({"type": "error", "message": f"{type(exc).__name__}: {exc}"})
+        finally:
+            maybe_run_monitors()
+
+    threading.Thread(target=work, daemon=True).start()
+
+    def stream():
+        while True:
+            ev = events.get()
+            yield f"data: {json.dumps(ev, ensure_ascii=False, default=str)}\n\n"
+            if ev["type"] in ("done", "error"):
+                break
+
+    return StreamingResponse(stream(), media_type="text/event-stream")
 
 
 @app.get("/deployment")

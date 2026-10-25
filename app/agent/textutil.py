@@ -3,16 +3,22 @@ from __future__ import annotations
 
 import re
 
+from app.data.cities import DISPLAY_EN, lookup
+
 HEBREW = re.compile(r"[֐-׿]")
 LATIN = re.compile(r"[A-Za-z]")
 
 
-CHAIN_HE = {"Shufersal": "שופרסל", "Rami Levy": "רמי לוי", "Victory": "ויקטורי", "Yohananof": "יוחננוף"}
-CITY_HE = {
-    "Tel Aviv": "תל אביב", "Jerusalem": "ירושלים", "Haifa": "חיפה", "Beer Sheva": "באר שבע",
-    "Rishon LeZion": "ראשון לציון", "Ashdod": "אשדוד", "Netanya": "נתניה", "Petah Tikva": "פתח תקווה",
+CHAIN_HE = {
+    "Shufersal": "שופרסל", "Rami Levy": "רמי לוי", "Victory": "ויקטורי", "Yohananof": "יוחננוף",
+    "Osher Ad": "אושר עד", "Tiv Taam": "טיב טעם", "Yellow": "יילו", "Hazi Hinam": "חצי חינם",
 }
-_PROPER = re.compile("|".join(re.escape(n) for n in [*CHAIN_HE, *CITY_HE, *CHAIN_HE.values(), *CITY_HE.values()]))
+# English display name -> everyday Hebrew name ("תל אביב - יפו" -> "תל אביב")
+_HE_SHORT = {"1200": "מודיעין"}
+CITY_HE = {en: _HE_SHORT.get(code) or lookup(code)["he"].split(" - ")[0]
+           for code, en in DISPLAY_EN.items() if lookup(code)}
+_PROPER = re.compile("|".join(re.escape(n) for n in sorted(
+    [*CHAIN_HE, *CITY_HE, *CHAIN_HE.values(), *CITY_HE.values()], key=len, reverse=True)))
 
 
 def detect_language(text: str) -> str:
@@ -34,7 +40,8 @@ INJECTION_PATTERNS = re.compile(
     re.I,
 )
 OFF_TOPIC_HINTS = re.compile(
-    r"\b(poem|weather|stock|bitcoin|code|python|recipe|joke|capital of|president|homework)\b|שיר|מזג אוויר|בדיחה",
+    r"\b(poem|weather|stock|bitcoin|code|python|recipe|joke|capital of|president|homework)\b|"
+    r"(?<![֐-׿])שיר(?![֐-׿])|מזג ה?אוויר|בדיחה",
     re.I,
 )
 BASKET_HINTS = re.compile(r"basket|shopping list|my list|סל|רשימת קניות|רשימה", re.I)

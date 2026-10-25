@@ -14,8 +14,8 @@ import zlib
 from app.agent.agent import AgentResult
 from app.agent.textutil import CHAIN_HE, CITY_HE, classify_topic, detect_language
 from app.agent.versions import AgentVersion
+from app.data import cities as city_table
 from app.data.catalog import Catalog
-from app.data.xml_parse import HEBREW_CITY_NAMES
 
 EN_HE = {
     "milk": "חלב", "bread": "לחם", "eggs": "ביצים", "cottage cheese": "קוטג", "cottage": "קוטג", "white cheese": "גבינה לבנה", "yellow cheese": "גבינה צהובה", "hummus": "חומוס",
@@ -27,11 +27,13 @@ EN_HE = {
     "ketchup": "קטשופ", "mayonnaise": "מיונז", "tea": "תה", "honey": "דבש", "olive oil": "שמן זית",
     "cream cheese": "גבינת שמנת", "chicken": "עוף", "wafers": "ופלים", "cereal": "דגני בוקר",
 }
-CITY_ALIASES = {**{k: v for k, v in HEBREW_CITY_NAMES.items()}}
 FILLER = re.compile(
-    r"\b(what's|whats|what|is|the|cheapest|price|prices|of|for|how|much|does|cost|costs|where|can|i|buy|"
-    r"find|in|at|a|an|please|me|tell|compare|today|right|now|basket|shopping|list|my|items?)\b|[?!.,:]|"
-    r"רשימת קניות|השווה|סל של|כמה עולה|כמה עולים|הכי זול|הכי זולה|מחיר|איפה|אפשר|לקנות|את|של|היום|בבקשה",
+    r"\b(what's|whats|what|which|is|are|the|cheapest|cheaper|lowest|best|price|prices|of|for|on|how|much|does|"
+    r"cost|costs|where|can|i|buy|get|find|in|at|a|an|has|have|chain|chains|please|me|tell|compare|today|right|"
+    r"now|basket|shopping|list|my|items?)\b|[?!.,:]|"
+    # Hebrew words only as whole words: "של" must not be cut out of "4שליש"
+    r"(?<![֐-׿])(רשימת קניות|השווה|סל של|כמה עולה|כמה עולים|הכי זול|הכי זולה|מחיר|איפה|אפשר|"
+    r"לקנות|את|של|היום|בבקשה|באיזו|באיזה|רשת|יש)(?![֐-׿])",
     re.I,
 )
 
@@ -41,25 +43,36 @@ def find_city(text: str, cities: list[str]) -> str | None:
     for c in cities:
         if c.lower() in low:
             return c
-    for heb, eng in sorted(CITY_ALIASES.items(), key=lambda kv: -len(kv[0])):
-        if heb in text and eng in cities:
-            return eng
-    return None
+    hit = city_table.infer(text)
+    return hit["en"] if hit and hit["en"] in cities else None
 
 
-def extract_product_query(text: str, city: str | None) -> str:
+def extract_product_query(text: str, city: str | None, translate: bool = False) -> str:
+    """Strip question words and the city. English stays English (the catalog has English
+    names); `translate=True` maps common grocery words to Hebrew as a fallback."""
     q = text
     if city:
         q = re.sub(re.escape(city), " ", q, flags=re.I)
-        for heb, eng in CITY_ALIASES.items():
-            if eng == city:
-                q = re.sub(rf"ב?{re.escape(heb)}", " ", q)
+        he = CITY_HE.get(city)
+        if he:
+            q = re.sub(rf"ב?{re.escape(he)}", " ", q)
     low = q.lower()
-    for en in sorted(EN_HE, key=len, reverse=True):
-        if re.search(rf"\b{re.escape(en)}\b", low):
-            low = re.sub(rf"\b{re.escape(en)}\b", EN_HE[en], low)
+    if translate:
+        for en in sorted(EN_HE, key=len, reverse=True):
+            if re.search(rf"\b{re.escape(en)}\b", low):
+                low = re.sub(rf"\b{re.escape(en)}\b", EN_HE[en], low)
     q = FILLER.sub(" ", low)
     return re.sub(r"\s+", " ", q).strip()
+
+
+def search(catalog: Catalog, text: str, city: str | None, limit: int = 8) -> tuple[str, list[dict]]:
+    """Search as the model would: as asked first, then translated to Hebrew."""
+    query = extract_product_query(text, city)
+    hits = catalog.search_products(query, limit=limit)
+    if not hits and re.search(r"[A-Za-z]", query):
+        query = extract_product_query(text, city, translate=True)
+        hits = catalog.search_products(query, limit=limit)
+    return query, hits
 
 
 class SimAgent:
@@ -154,7 +167,10 @@ class SimAgent:
             return self._finish(res, rng, latency_multiplier, 0)
 
         if not code:
-            hits = self.c.search_products(query)
+            if not intent.get("query_he"):
+                query, hits = search(self.c, question, city)
+            else:
+                hits = self.c.search_products(query)
             res.tool_calls.append({"name": "search_products", "args": {"query": query}, "result": hits})
             if not hits:
                 res.answer = ("I couldn't find that product in the catalog." if answer_lang == "en"
@@ -203,10 +219,9 @@ class SimAgent:
         parts = re.split(r",|\band\b| ו", question)
         codes = []
         for p in parts:
-            q = extract_product_query(p, city)
-            if len(q) < 2:
+            if len(extract_product_query(p, city)) < 2:
                 continue
-            hits = self.c.search_products(q, limit=1)
+            q, hits = search(self.c, p, city, limit=1)
             res.tool_calls.append({"name": "search_products", "args": {"query": q}, "result": hits})
             if hits:
                 codes.append(hits[0]["item_code"])

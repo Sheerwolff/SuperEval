@@ -2,7 +2,7 @@
 
 Every chain publishes the same logical schema, but in practice the files differ:
 UTF-8 vs UTF-16, with/without BOM, `SubChainID` vs `SubChainId`, `ZIPCode` vs
-`ZipCode`, and city as a name (most chains) or a CBS numeric code (Shufersal).
+`ZipCode`, and city as a name (most chains), a CBS numeric code (Shufersal) or 0 (Yohananof).
 We lower-case every tag and decode defensively so one parser handles all chains.
 """
 from __future__ import annotations
@@ -13,26 +13,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-# CBS locality codes used by Shufersal -> canonical English city name.
-CBS_CITY_CODES = {
-    "5000": "Tel Aviv", "3000": "Jerusalem", "4000": "Haifa", "9000": "Beer Sheva",
-    "8300": "Rishon LeZion", "7900": "Petah Tikva", "70": "Ashdod", "7400": "Netanya",
-    "6100": "Bnei Brak", "8600": "Ramat Gan", "6600": "Holon", "6200": "Bat Yam",
-    "8400": "Rehovot", "7100": "Ashkelon", "6400": "Herzliya", "8700": "Raanana",
-    "6900": "Kfar Saba", "1200": "Modiin",
-}
-
-# Hebrew city spellings seen in the files -> canonical English city name.
-HEBREW_CITY_NAMES = {
-    "תל אביב": "Tel Aviv", "תל אביב יפו": "Tel Aviv", "תל אביב-יפו": "Tel Aviv", "ת\"א": "Tel Aviv",
-    "ירושלים": "Jerusalem", "חיפה": "Haifa", "באר שבע": "Beer Sheva", "באר-שבע": "Beer Sheva",
-    "ראשון לציון": "Rishon LeZion", "ראשון-לציון": "Rishon LeZion", "ראשל\"צ": "Rishon LeZion",
-    "פתח תקווה": "Petah Tikva", "פתח תקוה": "Petah Tikva", "פתח-תקווה": "Petah Tikva",
-    "אשדוד": "Ashdod", "נתניה": "Netanya", "בני ברק": "Bnei Brak", "רמת גן": "Ramat Gan",
-    "חולון": "Holon", "בת ים": "Bat Yam", "רחובות": "Rehovot", "אשקלון": "Ashkelon",
-    "הרצליה": "Herzliya", "רעננה": "Raanana", "כפר סבא": "Kfar Saba",
-    "מודיעין": "Modiin", "מודיעין מכבים רעות": "Modiin", "ראשלצ": "Rishon LeZion",
-}
+from app.data import cities
 
 
 def read_xml(path: Path) -> ET.Element:
@@ -56,24 +37,15 @@ def _txt(el: ET.Element, tag: str) -> str | None:
 
 
 def normalize_city(raw: str | None) -> str | None:
-    if not raw:
-        return None
-    raw = raw.strip()
-    if raw in CBS_CITY_CODES:
-        return CBS_CITY_CODES[raw]
-    cleaned = re.sub(r"\s+", " ", raw)
-    return HEBREW_CITY_NAMES.get(cleaned) or HEBREW_CITY_NAMES.get(cleaned.replace("-", " "))
+    """CBS code or Hebrew city name -> English display name (official locality table)."""
+    hit = cities.lookup(raw)
+    return hit["en"] if hit else None
 
 
 def infer_city(*texts: str | None) -> str | None:
     """Fallback when the City field is empty or '0': look for a known city name in free text."""
-    for text in texts:
-        if not text:
-            continue
-        for heb, eng in sorted(HEBREW_CITY_NAMES.items(), key=lambda kv: -len(kv[0])):
-            if heb in text:
-                return eng
-    return None
+    hit = cities.infer(*texts)
+    return hit["en"] if hit else None
 
 
 def parse_stores(path: Path, chain: str) -> list[dict]:

@@ -1,78 +1,96 @@
 import streamlit as st
 
-from lib import fmt, frames, kpis, setup
+from components import TOUR, connect_card, tour_start
+from lib import fmt, frames, kpis, setup, tiles
 
 setup("Home", "🛒")
+
+wrap = st.session_state.get("tour_step") == len(TOUR) - 1
+
+if wrap:
+    st.markdown("<div class='hero'><h1>That's the tour 🎉</h1></div>", unsafe_allow_html=True)
+    st.markdown(
+        """
+In about three minutes you saw:
+
+- **An agent on real data.** Prices from 8 Israeli chains across 25 cities, published daily by law, with messy
+  XML normalized and every product given English names and categories.
+- **Layer 1: evals on the agent.** Every ₪ figure is checked exactly against the database. Grounding, tool use,
+  language, scope and product relevance are checked too, and an LLM judge covers the rest.
+- **A bad deploy caught.** Statistically gated SLOs fired on v2 within seconds and resolved on rollback.
+- **Layer 2: evals on the judge.** Canaries, recall on known-bad answers, flip rate and human κ. The judge's
+  own regression was invisible to Layer 1 and caught here.
+"""
+    )
+    connect_card("Let's connect", "Thanks for taking the tour. I'd be glad to walk you through the design "
+                 "decisions, or talk about what you're building.")
+    a, b = st.columns(2)
+    if a.button("Explore on my own", use_container_width=True, type="primary"):
+        st.session_state.tour_step = None
+        st.rerun()
+    if b.button("Restart the tour", use_container_width=True):
+        tour_start()
+    st.stop()
 
 st.markdown(
     """
 <div class="hero">
 <h1>PriceWatch Evals</h1>
 <p>A live LLM agent answers grocery price questions over <b>real, daily-published Israeli supermarket
-data</b>. Every answer is evaluated in production, exactly where possible and by an LLM judge where
-not, and monitored for regressions, drift and stale data.</p>
+data</b>. Every answer is evaluated in production, and so is the LLM judge doing the evaluating.</p>
 </div>
 """,
     unsafe_allow_html=True,
 )
+connect_card()
+
+c1, c2 = st.columns([1, 2], vertical_alignment="center")
+if c1.button("▶  Take the 3-minute tour", type="primary", use_container_width=True):
+    tour_start()
+c2.caption("Ask the agent → break production → investigate → see who watches the judge. "
+           "Or use the sidebar to explore freely.")
 
 traces, evals = frames(days=1)
-metrics = ["price_accuracy", "grounded_prices", "language_match", "judge_helpfulness", "latency_p95_ms"]
+metrics = ["price_accuracy", "grounded_prices", "product_relevance", "language_match", "judge_helpfulness",
+           "latency_p95_ms"]
 vals = kpis(evals, traces, metrics)
-labels = {
-    "price_accuracy": "Price accuracy",
-    "grounded_prices": "Grounded prices",
-    "language_match": "Language match",
-    "judge_helpfulness": "Judge helpfulness",
-    "latency_p95_ms": "Latency p95",
-}
+labels = {"price_accuracy": "Price accuracy", "grounded_prices": "Grounded prices",
+          "product_relevance": "Right product", "language_match": "Language match",
+          "judge_helpfulness": "Judge helpfulness", "latency_p95_ms": "Latency p95"}
 st.markdown("##### Last 24 hours")
-cols = st.columns(len(metrics) + 1)
-cols[0].markdown(
-    f"<div class='tile'><div class='label'>Requests</div><div class='value'>{len(traces):,}</div>"
-    f"<div class='sub'>all sources</div></div>",
-    unsafe_allow_html=True,
-)
-for col, m in zip(cols[1:], metrics):
-    v, n = vals[m]
-    col.markdown(
-        f"<div class='tile'><div class='label'>{labels[m]}</div><div class='value'>{fmt(m, v)}</div>"
-        f"<div class='sub'>n = {n:,}</div></div>",
-        unsafe_allow_html=True,
-    )
+tiles([("Requests", f"{len(traces):,}", "all sources", False)]
+      + [(labels[m], fmt(m, vals[m][0]), f"n = {vals[m][1]:,}", False) for m in metrics])
 
 st.write("")
-a, b, c = st.columns(3)
+st.markdown("#### Two layers of evaluation")
+a, b = st.columns(2, gap="large")
 with a:
-    st.markdown("#### 1 · Talk to the agent")
-    st.write("Ask about prices in Hebrew or English. Each reply comes back with its eval scorecard: "
-             "exact price checks against the database, grounding, language and scope checks, plus the judge's verdict.")
-    st.page_link("pages/1_Chat.py", label="Open chat", icon="💬")
-with b:
-    st.markdown("#### 2 · Break production")
-    st.write("Deploy **v2**, a plausible 'faster & cheaper' prompt. Send traffic and watch the SLO "
-             "alerts fire on the monitor. Then roll back.")
-    st.page_link("pages/2_Live_Monitor.py", label="Open live monitor", icon="📈")
-with c:
-    st.markdown("#### 3 · Investigate")
-    st.write("Drill into any trace: tool calls, the numbers that didn't match, the judge's reasoning. "
-             "Compare versions with confidence intervals.")
-    st.page_link("pages/3_Trace_Explorer.py", label="Open trace explorer", icon="🔎")
-
-st.divider()
-st.markdown("#### What's monitored")
-st.markdown(
-    """
-| Layer | Signal | How |
-|---|---|---|
-| **Correctness** | Every quoted ₪ price matches a tool result | deterministic, 100% of traffic |
-| **Grounding** | No price stated without a price lookup; no chains we don't cover | deterministic |
-| **Behaviour** | Right tool used · reply in user's language · off-topic and prompt-injection declined | deterministic |
-| **Quality** | Helpfulness and groundedness on a 1–5 rubric | LLM judge, sampled, calibrated against human labels |
-| **Ops** | p95 latency, cost/request, errors, daily budget | from traces |
-| **Inputs** | Topic and language mix vs. last 7 days | PSI drift |
-| **Data** | Each chain's price feed age vs. 36h SLA | ingest runs |
+    st.markdown("##### Layer 1 · the agent")
+    st.markdown(
+        """
+| Signal | How |
+|---|---|
+| Every quoted ₪ price matches a tool result | deterministic, 100% |
+| No price without a lookup; no chains we don't cover | deterministic |
+| Priced the product that was asked for | deterministic + judge |
+| Right tool, user's language, off-topic/injection declined | deterministic |
+| Helpfulness and groundedness (1–5) | LLM judge |
+| Latency, cost, errors, input drift, data freshness | from traces and ingests |
 """
-)
-st.caption("The 30-day history is seeded by a simulator with four scripted incidents; the 'backfill' source tag marks "
-           "it everywhere. Live chats and synthetic bursts are added on top in real time.")
+    )
+with b:
+    st.markdown("##### Layer 2 · the judge")
+    st.markdown(
+        """
+| Signal | How |
+|---|---|
+| Fails answers we *know* are bad | recall vs. deterministic ground truth |
+| Still right on known cases | daily canary set |
+| Same verdict when asked twice | flip rate |
+| Agrees with humans | Cohen's κ from labels |
+| Rewards length? favours a language? | bias checks |
+| Errors, latency, cost | judge ops |
+"""
+    )
+st.caption("The 30-day history is seeded by a simulator with five scripted incidents; the 'backfill' source tag "
+           "marks it everywhere. Live chats and synthetic bursts are added on top in real time.")
