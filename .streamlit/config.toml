@@ -6,18 +6,18 @@ font = "sans serif"
 baseRadius = "0.6rem"
 
 [theme.light]
-primaryColor = "#8f720a"            # primary-700 (gold, readable under white button text)
-backgroundColor = "#fff9e5"         # background-50
+primaryColor = "#f4d35d"            # primary
+backgroundColor = "#fff7e0"         # background
 secondaryBackgroundColor = "#fff2cc" # background-100
-textColor = "#061a2d"               # text-900
+textColor = "#0d3c68"               # text
 linkColor = "#1669b6"               # text-600
 borderColor = "#ffe699"             # background-200
 
 [theme.dark]
-primaryColor = "#bf980d"            # primary-400 (dark scale)
-backgroundColor = "#1a1300"         # background-50 (dark scale)
+primaryColor = "#a2810b"            # primary
+backgroundColor = "#1f1700"         # background
 secondaryBackgroundColor = "#332600" # background-100 (dark scale)
-textColor = "#d2e6f9"               # text-900 (dark scale)
+textColor = "#97c6f2"               # text
 linkColor = "#77b4ee"               # text-700 (dark scale)
 borderColor = "#664d00"             # background-200 (dark scale)
 
