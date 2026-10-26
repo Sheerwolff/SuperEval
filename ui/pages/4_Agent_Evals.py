@@ -144,7 +144,7 @@ with left:
     recent_t = traces[traces.created_at >= now - timedelta(hours=3)]
     recent_e = evals[evals.created_at >= now - timedelta(hours=3)]
     day_t = traces[traces.created_at >= now - timedelta(days=1)]
-    st.markdown("#### Layer 1 · the agent, last 3 hours")
+    st.markdown("#### Success Criteria, last 3 hours")
     items = [("Accuracy", "—" if run is None else f"{run['summary']['overall']['rate']:.0%}",
               "latest golden-set test", False, DEFS["accuracy"])]
     for m, label, key in (("judge_helpfulness", "Helpfulness", "helpfulness"), ("grounding", "Grounding", "grounding"),
