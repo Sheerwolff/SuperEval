@@ -8,12 +8,12 @@ from app.evals import golden
 from app.evals.human import (
     FAILURE_TAGS,
     agreement,
+    approve_into_golden,
     curate_golden,
     draft_from_trace,
     golden_for_trace,
     judgments_frame,
     override_rate,
-    promote,
 )
 from components import owner_unlock, role
 from lib import eval_badges, setup, tiles
@@ -21,11 +21,10 @@ from render import render_chart, render_queries
 
 setup("Review", "🧑‍⚖️")
 st.markdown("## 🧑‍⚖️ Review traces")
-st.caption("Read what the analyst did and judge it yourself. Judgments are stored with your role. Owner judgments "
-           "calibrate the LLM judge and can add answers to the golden set; visitor judgments are tracked "
-           "separately. Together they measure the **human override rate**, and whether the automated evals catch "
-           "what people catch. Pick source **golden** to review golden-set test answers: an owner's judgment there "
-           "approves, fixes or rejects the golden question.")
+st.caption("Pick an answer, then: ① read the question and answer, ② read the trace behind it, ③ judge it (what the "
+           "agent got wrong, and what a good answer looks like), ④ approve it into the golden set. Owner and visitor "
+           "judgments are kept apart; together they measure the **human override rate**. Pick source **golden** to "
+           "review golden-set test answers.")
 owner_unlock()
 me = role()
 if toast := st.session_state.pop("review_toast", None):
@@ -118,14 +117,20 @@ with SessionLocal() as s:
     in_golden = s.execute(select(GoldenItem.id).where(GoldenItem.source_trace_id == tid)).scalar()
 
 st.divider()
-a, b = st.columns([3, 2], gap="large")
-with a:
-    st.markdown(f"#### {tr['question']}")
-    st.caption(meta.replace("$", "\\$"))
-    st.markdown(tr["answer"] or f"*(no answer: {tr['error']})*")
-    render_chart(tr, key="_review")
-    render_queries(tr, expanded=failing != "any")
-with b:
+
+# ---- ① question & answer ---------------------------------------------------------------
+st.markdown("### ① Question & answer")
+st.markdown(f"#### {tr['question']}")
+st.markdown(tr["answer"] or f"*(no answer: {tr['error']})*")
+render_chart(tr, key="_review")
+
+# ---- ② the trace -------------------------------------------------------------------------
+st.markdown("### ② The trace")
+st.caption(meta.replace("$", "\\$"))
+q_col, v_col = st.columns([3, 2], gap="large")
+with q_col:
+    render_queries(tr, expanded=True)
+with v_col:
     st.markdown("**Automated verdicts**")
     st.markdown(eval_badges(evals) or "—", unsafe_allow_html=True)
     for e in evals:
@@ -137,23 +142,6 @@ with b:
     judge = next((e for e in evals if e["kind"] == "judge" and e["details"].get("reasoning")), None)
     if judge:
         st.caption(f"Judge ({judge['details'].get('judge_model')}): {judge['details']['reasoning']}")
-    owner_prior = [j for j in prior if j["role"] == "owner" and not j["promoted_to"]]
-    if in_golden and not gold:
-        st.caption(f"🏅 In the golden set as **{in_golden}**.")
-    elif not gold and st.button("🏅 Add to the golden set", key=f"golden_{tid}", use_container_width=True):
-        # an owner judgment carries corrected SQL / tags into the draft; otherwise the agent's own SQL is used
-        new = promote(owner_prior[0]["id"]) if me == "owner" and owner_prior else draft_from_trace(
-            tid, "trace", "Added from the Review page.")
-        st.session_state.review_toast = (f"Added as draft {new}. The next golden-set test on Agent Evals answers it; "
-                                         "review that answer here (source: golden) to approve it.")
-        st.rerun()
-    if prior:
-        st.markdown("**Earlier human judgments**")
-        for j in prior:
-            st.caption(f"{j['role']}: correct={j['correct']}, method_ok={j['method_ok']}, tags={j['tags'] or '—'}"
-                       + (f", corrected: {j['corrected_answer']}" if j["corrected_answer"] else "")
-                       + (f" · promoted to {j['promoted_to']}" if j["promoted_to"] else ""))
-
 if gold:
     with st.container(border=True):
         st.markdown(f"**🏅 Golden question {gold['id']}** · status **{gold['status']}** · {gold['qtype']} · "
@@ -173,32 +161,78 @@ if gold:
         else:
             st.caption("No reference SQL: this question is scored on whether the agent declines or states an "
                        "assumption.")
-        if me == "owner":
-            st.caption("Your judgment below curates this question: agreeing with the scorer approves it, correct "
-                       "SQL replaces its reference, and 'bad question' rejects it.")
 
-st.markdown(f"#### Your judgment · as **{me}**")
-with st.form(f"judge_{tid}"):
-    c1, c2 = st.columns(2)
-    correct = c1.radio("Is the headline answer correct?", ["yes", "no", "unsure"], horizontal=True)
-    method = c2.radio("Was the method sound?", ["yes", "no", "n/a"], horizontal=True,
-                      help="Compared like with like, sensible filters, honest caveats.")
-    tags = st.multiselect("What went wrong (if anything)", FAILURE_TAGS)
-    corrected = st.text_input("Correct answer, if you know it")
-    corrected_sql = st.text_area("Correct reference SQL (optional, replaces the golden reference)" if gold else
-                                 "Correct SQL (optional, becomes the golden reference)", height=80) \
-        if me == "owner" else None
-    bad_question = st.checkbox("This golden question is bad: reject it") if gold and me == "owner" else False
-    note = st.text_input("Note")
-    if st.form_submit_button("Save judgment", type="primary"):
-        with SessionLocal() as s:
-            s.add(HumanJudgment(trace_id=tid, role=me, reviewer=st.session_state.session_id, correct=correct,
-                                method_ok=None if method == "n/a" else method == "yes", tags=tags,
-                                corrected_answer=corrected or None, corrected_sql=corrected_sql or None,
-                                note=note or None))
-            s.commit()
-        msg = "Saved. Thanks!"
-        if gold and me == "owner":
-            msg += " " + curate_golden(tid, correct, corrected_sql, bad_question) + "."
-        st.session_state.review_toast = msg
+# ---- ③ your judgment -------------------------------------------------------------------------
+st.markdown(f"### ③ Your judgment · as **{me}**")
+for j in prior:
+    st.caption(f"Earlier, {j['role']}: correct = {j['correct']}" + (f" · {', '.join(j['tags'])}" if j["tags"] else "")
+               + (f" · went wrong: {j['note']}" if j["note"] else "")
+               + (f" · good answer: {j['corrected_answer']}" if j["corrected_answer"] else "")
+               + (f" · in the golden set as {j['promoted_to']}" if j["promoted_to"] else ""))
+correct = st.radio("Is the answer correct?", ["yes", "no", "unsure"], index=None, horizontal=True,
+                   key=f"correct_{tid}")
+wrong_col, good_col = st.columns(2, gap="large")
+with wrong_col:
+    st.markdown("**What did the agent get wrong?**")
+    tags = st.multiselect("Problems", FAILURE_TAGS, key=f"tags_{tid}",
+                          help="'bad method' also records that the method was unsound")
+    wrong = st.text_area("Describe it", key=f"wrong_{tid}", height=100,
+                         placeholder="e.g. compared averages over different products per chain")
+with good_col:
+    st.markdown("**What should a good answer have looked like?**")
+    good = st.text_area("A good answer", key=f"good_{tid}", height=100,
+                        placeholder="e.g. Rami Levy is cheapest in Haifa, about 8% below the city median")
+    sql = st.text_area("Correct SQL (becomes the golden reference)", key=f"sql_{tid}", height=100) \
+        if me == "owner" else ""
+
+
+def save_judgment() -> int | None:
+    if correct is None:
+        st.warning("First say whether the answer is correct (step ③).")
+        return None
+    with SessionLocal() as s:
+        j = HumanJudgment(trace_id=tid, role=me, reviewer=st.session_state.session_id, correct=correct,
+                          method_ok=None if correct == "unsure" else "bad method" not in tags, tags=tags,
+                          corrected_answer=good.strip() or None, corrected_sql=(sql or "").strip() or None,
+                          note=wrong.strip() or None)
+        s.add(j)
+        s.commit()
+        return j.id
+
+
+# ---- ④ approve and add to the golden set ---------------------------------------------------------
+st.markdown("### ④ Approve and add to the golden set")
+if me == "owner":
+    if gold:
+        st.caption("This answer comes from a golden-set test. Approving saves your judgment and curates the question: "
+                   "agreeing with the scorer approves it, correct SQL replaces its reference.")
+        bad_question = st.checkbox("This golden question is bad: reject it", key=f"bad_{tid}")
+    else:
+        st.caption(("Already in the golden set as **" + in_golden + "**. " if in_golden else "")
+                   + "Approving saves your judgment and puts this question in the golden set, approved when the "
+                   "reference can be trusted: you gave correct SQL, judged the answer correct, or it's about declining "
+                   "or stating an assumption. Otherwise it's added as a draft until you add the SQL.")
+        bad_question = False
+    approve, only = st.columns(2)
+    if approve.button("✅ Approve and add to the golden set", type="primary", use_container_width=True,
+                      key=f"approve_{tid}"):
+        jid = save_judgment()
+        if jid:
+            msg = curate_golden(tid, correct, sql, bad_question) if gold else approve_into_golden(jid)
+            st.session_state.review_toast = f"Judgment saved. {msg}."
+            st.rerun()
+else:
+    st.caption("The owner approves what goes into the golden set. You can suggest this question for it: it's added as "
+               "a draft, with your good answer attached.")
+    approve, only = st.columns(2)
+    if not gold and approve.button("🏅 Save and suggest for the golden set", type="primary",
+                                   use_container_width=True, key=f"suggest_{tid}"):
+        if save_judgment():
+            new = draft_from_trace(tid, "trace", "Suggested on the Review page."
+                                   + (f" A good answer: {good.strip()}" if good.strip() else ""))
+            st.session_state.review_toast = f"Judgment saved, and {new} suggested for the golden set. Thanks!"
+            st.rerun()
+if only.button("Save judgment only", use_container_width=True, key=f"save_{tid}"):
+    if save_judgment():
+        st.session_state.review_toast = "Judgment saved. Thanks!"
         st.rerun()

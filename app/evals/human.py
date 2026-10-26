@@ -248,3 +248,30 @@ def curate_golden(trace_id: str, correct: str, corrected_sql: str | None = None,
         g.updated_at = utcnow()
         s.commit()
         return msg
+
+
+def approve_into_golden(judgment_id: int) -> str:
+    """Owner's 'approve and add to the golden set' from the Review page: put the judged trace's question in the golden
+    set (or reuse its item) and approve it when the reference can be trusted: the owner gave correct SQL, judged the
+    agent's answer correct, or the question is about declining / stating an assumption. Otherwise it stays a draft
+    until correct SQL is added. Returns what happened."""
+    with SessionLocal() as s:
+        j = s.get(HumanJudgment, judgment_id)
+        if j is None or j.role != "owner":
+            raise ValueError("only owner judgments can approve golden questions")
+        notes = "Approved on the Review page." + (f" A good answer: {j.corrected_answer}" if j.corrected_answer else "")
+        gid = draft_from_trace(j.trace_id, "promoted", notes, tags=j.tags or (), corrected_sql=j.corrected_sql,
+                               session=s)
+        g = s.get(GoldenItem, gid)
+        sql = (j.corrected_sql or "").strip()
+        if sql:
+            g.reference_sql = sql
+        j.promoted_to = gid
+        if sql or j.correct == "yes" or g.answer_type in ("decline", "assumption"):
+            g.status, g.reviewed_by = "approved", "owner"
+            msg = f"{gid} approved and in the golden set"
+        else:
+            msg = f"{gid} added as a draft: the answer was judged wrong, so add the correct SQL to approve it"
+        g.updated_at = utcnow()
+        s.commit()
+        return msg

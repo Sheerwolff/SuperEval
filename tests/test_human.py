@@ -107,3 +107,28 @@ def test_golden_drafts_from_traces_and_feedback(traces):
     with SessionLocal() as s:
         g = s.query(GoldenItem).filter_by(source_trace_id=bad).one()
         assert g.source == "feedback" and "method_lint" in g.notes and "fine to me" in g.notes
+
+
+def test_approve_into_golden(traces):
+    from app.evals.human import approve_into_golden
+
+    bad, good = traces
+    with SessionLocal() as s:
+        ok = HumanJudgment(trace_id=good, role="owner", correct="yes", method_ok=True, tags=[])
+        wrong = HumanJudgment(trace_id=bad, role="owner", correct="no", method_ok=False, tags=["bad method"])
+        s.add_all([ok, wrong])
+        s.commit()
+        ok_id, wrong_id = ok.id, wrong.id
+    assert "approved" in approve_into_golden(ok_id)  # judged correct: the agent's own SQL is a trusted reference
+    assert "draft" in approve_into_golden(wrong_id)  # judged wrong, no SQL: can't trust the reference yet
+    with SessionLocal() as s:
+        fixed = HumanJudgment(trace_id=bad, role="owner", correct="no", method_ok=False, tags=["bad method"],
+                              corrected_sql="SELECT * FROM chain_price_index('Haifa', NULL)")
+        s.add(fixed)
+        s.commit()
+        fixed_id = fixed.id
+    assert "approved" in approve_into_golden(fixed_id)  # same item, now with the owner's SQL
+    with SessionLocal() as s:
+        items = s.query(GoldenItem).filter(GoldenItem.source_trace_id.in_([bad, good])).all()
+        assert len(items) == 2 and all(g.status == "approved" for g in items)
+        assert s.get(HumanJudgment, fixed_id).promoted_to == s.query(GoldenItem).filter_by(source_trace_id=bad).one().id
