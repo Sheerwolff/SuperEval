@@ -49,6 +49,11 @@ if view.empty:
     st.stop()
 
 ids = view.id.tolist()
+# save() can't move the selectbox once it's drawn, so it leaves the next item here for the rerun
+if "golden_next" in st.session_state:
+    st.session_state.golden_sel = st.session_state.pop("golden_next")
+if toast := st.session_state.pop("golden_toast", None):
+    st.toast(toast)
 if st.session_state.get("golden_sel") not in ids:
     st.session_state.golden_sel = ids[0]
 sel = st.selectbox("Item", ids, key="golden_sel",
@@ -99,9 +104,9 @@ def save(new_status: str | None) -> None:
             g.status, g.reviewed_by = new_status, "owner"
         g.updated_at = utcnow()
         s.commit()
-    st.toast(f"{sel} {'→ ' + new_status if new_status else 'saved'}")
+    st.session_state.golden_toast = f"{sel} {'→ ' + new_status if new_status else 'saved'}"
     nxt = ids[(ids.index(sel) + 1) % len(ids)]
-    st.session_state.golden_sel = nxt if nxt != sel else None
+    st.session_state.golden_next = nxt if nxt != sel else None
     st.rerun()
 
 
