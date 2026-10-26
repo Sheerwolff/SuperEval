@@ -9,6 +9,7 @@ from app.evals.human import (
     FAILURE_TAGS,
     agreement,
     curate_golden,
+    draft_from_trace,
     golden_for_trace,
     judgments_frame,
     override_rate,
@@ -63,27 +64,38 @@ with st.expander("Agreement matrix and per-evaluator recall"):
         st.caption("No judgments yet.")
 
 # ---- trace list ---------------------------------------------------------------------
+FAILING = ["any", "any check", "grounding", "method_lint", "canonical_check", "sql_health", "completion",
+           "chart_lint", "decline_check", "assumption_check", "language_match", "judge_method", "judge_groundedness",
+           "judge_helpfulness", "golden_match"]
+TOPICS = ["any", "comparison", "lookup", "spread", "promo", "geo", "ambiguous", "unanswerable", "injection"]
 st.divider()
 f1, f2, f3 = st.columns(3)
-only_unreviewed = f1.toggle("Unreviewed only", value=True)
-only_flagged = f2.toggle("Failed an automated check", value=False)
-source = f3.selectbox("Source", ["user", "golden", "any", "synthetic", "backfill", "offline"])
+source = f1.selectbox("Source", ["user", "golden", "any", "synthetic", "backfill", "offline"])
+failing = f2.selectbox("Failing check", FAILING, help="'any check' = failed at least one automated check")
+topic = f3.selectbox("Question type", TOPICS)
+only_unreviewed = st.toggle("Unreviewed only", value=True)
 with SessionLocal() as s:
     q = select(Trace).where(Trace.analysis.is_not(None) | Trace.error.is_not(None)).order_by(
         Trace.created_at.desc()).limit(300)
     if source != "any":
         q = q.where(Trace.source == source)
+    if topic != "any":
+        q = q.where(Trace.topic == topic)
+    if failing != "any":
+        fails = select(EvalResult.trace_id).where(EvalResult.passed.is_(False))
+        q = q.where(Trace.id.in_(fails if failing == "any check" else fails.where(EvalResult.evaluator == failing)))
     traces = s.execute(q).scalars().all()
     reviewed = {tid for (tid,) in s.execute(select(HumanJudgment.trace_id).where(HumanJudgment.role == me))}
-    failed = {tid for (tid,) in s.execute(select(EvalResult.trace_id).where(EvalResult.passed.is_(False)))}
-    rows = [{"time": t.created_at.strftime("%m-%d %H:%M"), "version": t.agent_version, "question": t.question,
-             "automated": "⚠️ failed" if t.id in failed else "✓", "id": t.id} for t in traces
-            if (not only_unreviewed or t.id not in reviewed) and (not only_flagged or t.id in failed)]
+    rows = [{"time": t.created_at.strftime("%m-%d %H:%M"), "source": t.source, "type": t.topic,
+             "question": t.question,
+             "failed": ", ".join(e.evaluator for e in t.evals if e.passed is False) or "—", "id": t.id}
+            for t in traces if not only_unreviewed or t.id not in reviewed]
 if not rows:
     st.info("Nothing to review with these filters. Ask the analyst something on the Chat page first.")
     st.stop()
 table = pd.DataFrame(rows)
-pick = st.dataframe(table.drop(columns=["id"]), hide_index=True, use_container_width=True, height=240,
+st.caption(f"{len(table)} most recent matching traces")
+pick = st.dataframe(table.drop(columns=["id"]), hide_index=True, use_container_width=True, height=280,
                     on_select="rerun", selection_mode="single-row")
 idx = pick.selection.rows[0] if pick.selection.rows else 0
 tid = table.iloc[idx]["id"]
@@ -92,6 +104,9 @@ with SessionLocal() as s:
     t = s.get(Trace, tid)
     tr = {"id": t.id, "question": t.question, "answer": t.answer, "analysis": t.analysis, "tool_calls": t.tool_calls,
           "error": t.error, "version": t.agent_version, "model": t.model}
+    meta = (f"{t.created_at:%Y-%m-%d %H:%M} UTC · {t.source} · {t.agent_version} · {t.model} · {t.steps} steps · "
+            f"{t.latency_ms / 1000:.1f}s · {t.input_tokens + t.output_tokens:,} tokens · ${t.cost_usd:.4f} · "
+            f"trace `{t.id[:8]}`")
     evals = [{"evaluator": e.evaluator, "kind": e.kind, "passed": e.passed, "details": e.details} for e in t.evals]
     prior = s.execute(select(HumanJudgment).where(HumanJudgment.trace_id == tid)
                       .order_by(HumanJudgment.created_at.desc())).scalars().all()
@@ -106,16 +121,32 @@ st.divider()
 a, b = st.columns([3, 2], gap="large")
 with a:
     st.markdown(f"#### {tr['question']}")
-    st.caption(f"{tr['version']} · {tr['model']} · trace `{tr['id'][:8]}`")
+    st.caption(meta.replace("$", "\\$"))
     st.markdown(tr["answer"] or f"*(no answer: {tr['error']})*")
     render_chart(tr, key="_review")
-    render_queries(tr)
+    render_queries(tr, expanded=failing != "any")
 with b:
     st.markdown("**Automated verdicts**")
     st.markdown(eval_badges(evals) or "—", unsafe_allow_html=True)
     for e in evals:
-        if e["passed"] is False and e["details"].get("message"):
-            st.caption(f"✗ {e['evaluator']}: {e['details']['message']}")
+        if e["passed"] is False:
+            with st.expander(f"✗ {e['evaluator']}", expanded=True):
+                if e["details"].get("message"):
+                    st.markdown(e["details"]["message"])
+                st.json(e["details"], expanded=False)
+    judge = next((e for e in evals if e["kind"] == "judge" and e["details"].get("reasoning")), None)
+    if judge:
+        st.caption(f"Judge ({judge['details'].get('judge_model')}): {judge['details']['reasoning']}")
+    owner_prior = [j for j in prior if j["role"] == "owner" and not j["promoted_to"]]
+    if in_golden and not gold:
+        st.caption(f"🏅 In the golden set as **{in_golden}**.")
+    elif not gold and st.button("🏅 Add to the golden set", key=f"golden_{tid}", use_container_width=True):
+        # an owner judgment carries corrected SQL / tags into the draft; otherwise the agent's own SQL is used
+        new = promote(owner_prior[0]["id"]) if me == "owner" and owner_prior else draft_from_trace(
+            tid, "trace", "Added from the Review page.")
+        st.session_state.review_toast = (f"Added as draft {new}. The next golden-set test on Agent Evals answers it; "
+                                         "review that answer here (source: golden) to approve it.")
+        st.rerun()
     if prior:
         st.markdown("**Earlier human judgments**")
         for j in prior:
@@ -171,10 +202,3 @@ with st.form(f"judge_{tid}"):
             msg += " " + curate_golden(tid, correct, corrected_sql, bad_question) + "."
         st.session_state.review_toast = msg
         st.rerun()
-
-owner_prior = [j for j in prior if j["role"] == "owner" and not j["promoted_to"]]
-if me == "owner" and owner_prior and not gold and not in_golden:
-    if st.button("🏅 Add to the golden set"):
-        new = promote(owner_prior[0]["id"])
-        st.success(f"Added as draft {new}. It's tested in the next golden-set run on Agent Evals; review that "
-                   "answer here (source: golden) to approve it.")

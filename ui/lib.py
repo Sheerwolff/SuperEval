@@ -68,7 +68,7 @@ def setup(title: str, icon: str = "📊") -> None:
         connect_compact()
 
 
-PAGES = ["", "Chat", "Price_Explorer", "Agent_Evals", "Trace_Explorer", "Judge_Monitor", "Architecture",
+PAGES = ["", "Chat", "Price_Explorer", "Agent_Evals", "Judge_Monitor", "Architecture",
          "Review"]
 THEMES = {"☀️ Light": "Light", "🌙 Dark": "Dark", "💻 Auto": "System"}
 

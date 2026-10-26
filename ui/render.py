@@ -1,5 +1,5 @@
 """Rendering an analyst trace: chart from the agent's spec, and the queries behind the answer.
-Shared by the Chat, Trace Explorer and Review pages."""
+Shared by the Chat and Review pages."""
 from __future__ import annotations
 
 import pandas as pd

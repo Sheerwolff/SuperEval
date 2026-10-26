@@ -137,7 +137,7 @@ def judge_feedback_summary(since=None, session=None) -> dict:
                                              total=("said_pass", "size")).astype(int)
                     .reset_index().rename(columns={"disputed": "evaluator"})
                     .sort_values(["total", "evaluator"], ascending=[False, True], ignore_index=True))
-    recent = fb[~fb.agree].sort_values("created_at", ascending=False)[
+    recent = fb[~fb.agree].sort_values(["created_at", "id"], ascending=False)[  # id breaks same-timestamp ties
         ["created_at", "role", "question", "disputed", "note"]].head(20)
     return {"n": len(fb), "agree_rate": float(fb.agree.mean()), "n_disagree": int((~fb.agree).sum()),
             "disputed": disputed, "recent": recent}

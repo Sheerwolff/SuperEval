@@ -71,9 +71,10 @@ Secondary metrics are sliced by question type and language:
    eval scorecard.
 2. **Test the agent.** *Agent evals* runs the live agent on the golden set (about 4 minutes, ~$0.20) and shows
    accuracy, accuracy by question type and every wrong answer, next to the Layer 1 metrics on live traffic. Every
-   answer from the run is saved as a trace (source *golden*). The golden set grows from the *Trace explorer*'s
-   "Add to golden set", owner judgments on *Review*, and every disagreement with the verdicts in *Chat*.
-3. **Investigate.** *Trace explorer* filters to a failing check, showing the SQL, the result, and why the lint flagged it.
+   answer from the run is saved as a trace (source *golden*). The golden set grows from *Review* ("Add to the
+   golden set" and owner judgments) and from every disagreement with the verdicts in *Chat*.
+3. **Investigate.** *Review* filters to a failing check or question type, showing the SQL, the result, and why the
+   lint flagged it.
 4. **Who watches the judge?** *Judge monitor* shows the seeded lenient-judge incident, the canaries and κ.
 5. **Review.** Anyone can judge a trace on the *Review* page. Judgments are stored by role (visitor/owner), and
    owner judgments can add an answer to the golden set. With source *golden*, the owner reviews golden-set test

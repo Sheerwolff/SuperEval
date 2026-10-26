@@ -118,7 +118,7 @@ with st.container(border=True):
                 st.markdown(f"**{r['id']}** · {r['qtype']} · {r['question']}  \n"
                             f"→ {r.get('headline') or r.get('error') or 'no answer'}")
                 st.caption(", ".join(f"{k}: {v}" for k, v in (r.get("details") or {}).items())[:300])
-    labels = {"drafted": "generated drafts", "promoted": "Review page", "trace": "Trace explorer",
+    labels = {"drafted": "generated drafts", "promoted": "owner judgments", "trace": "the Review page",
               "feedback": "chat feedback"}
     st.caption("Golden set: " + " · ".join(f"{n} from {labels.get(src, src)}" for src, n in
                                           sorted(mix.items(), key=lambda kv: -kv[1])))
