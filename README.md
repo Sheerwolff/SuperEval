@@ -69,13 +69,10 @@ Secondary metrics are sliced by question type and language:
 
 1. **Ask the analyst.** Every query streams live. The answer comes with a chart, the SQL behind each number, and its
    eval scorecard.
-2. **Inject a fault.** *Live monitor* has fault-injection buttons; each sends 40 questions through the simulated
-   analyst, then runs the monitors.
-   - **Model regression:** the analyst falls into the Simpson's trap. Every number is still grounded, so grounding
-     stays green and only the method checks fire.
-   - **Schema change:** queries fail.
-   - **Lenient judge:** Layer 1 looks *better*; only Layer 2's canaries notice.
-   - **Slow LLM:** p95 latency breaches its SLO.
+2. **Test the agent.** *Agent evals* runs the live agent on the golden set (about 4 minutes, ~$0.20) and shows
+   accuracy, accuracy by question type and every wrong answer, next to the Layer 1 metrics on live traffic. The
+   golden set grows from the *Golden set* queue, the *Trace explorer*'s "Add to golden set", and every
+   disagreement with the verdicts in *Chat*.
 3. **Investigate.** *Trace explorer* filters to a failing check, showing the SQL, the result, and why the lint flagged it.
 4. **Who watches the judge?** *Judge monitor* shows the seeded lenient-judge incident, the canaries and κ.
 5. **Review.** Anyone can judge a trace on the *Review* page. Judgments are stored by role (visitor/owner), owner
@@ -170,9 +167,9 @@ Jerusalem) is committed for tests and CI, and the golden set is built from it so
 | `app/evals/` | Online Layer 1 evals, SQL lint, gpt-5 judge, judge monitor (Layer 2), canaries, calibration, human judgments, golden set, scorers, benchmark |
 | `app/monitor/` | Aggregates, rules (Wilson SLOs, z-score, PSI, freshness, budget, judge rules), alert lifecycle |
 | `app/traffic/` | Synthetic questions; 30-day backfill with six seeded incidents |
-| `app/api/` | FastAPI service (SSE chat stream, fault injection) and cost guard |
+| `app/api/` | FastAPI service (SSE chat stream, background golden-set runs, simulated bursts) and per-user cost guard |
 | `app/data/` | XML parsing, city normalization, ingest, LLM enrichment, snapshot fetch/sample |
-| `ui/` | Streamlit: chat, price explorer, live monitor, traces, judge monitor, golden set, review, architecture |
+| `ui/` | Streamlit: chat, price explorer, agent evals, traces, judge monitor, golden set, review, architecture |
 
 ## Run it locally
 
@@ -201,13 +198,15 @@ python scripts/alert_quality.py --seeds 1 2 3 4 5          # alert recall/precis
 1. **Database.** Create a [Neon](https://neon.tech) Postgres.
 2. **Space.** Create a Hugging Face Space with the *Docker* SDK.
    - **Secrets:** `OPENAI_API_KEY`, `DATABASE_URL`, `SNAPSHOT_REPO`, `ADMIN_KEY` and `CONTACT_WHATSAPP`.
-   - **Optional:** `DAILY_BUDGET_USD`, `AGENT_MODEL`, `JUDGE_MODEL` and `PROMPT_VERSION`.
+   - **Optional:** `USER_DAILY_BUDGET_USD`, `DAILY_BUDGET_USD`, `AGENT_MODEL`, `JUDGE_MODEL` and `PROMPT_VERSION`.
 3. **GitHub.** Add the repo secrets `HF_TOKEN`, `DATABASE_URL` and `OPENAI_API_KEY`, and the variable `HF_SPACE`.
    - **Pushes to `main`** deploy the Space.
    - **PRs** run the golden-set gate.
    - **Scheduled:** a daily job ingests prices, synthetic traffic runs every 30 minutes, and canaries run daily.
 
-LLM spend is capped by `DAILY_BUDGET_USD`. Past the cap the demo switches to the simulator and says so.
+Each user (by IP) can spend `USER_DAILY_BUDGET_USD` (default $1) of live LLM calls per UTC day, across chat and
+golden-set runs. Past it, chat switches to the simulator and says so, and golden-set runs are refused. There is no
+global ceiling. `DAILY_BUDGET_USD` only sets the threshold of the daily spend alert.
 
 ## Known limitations
 

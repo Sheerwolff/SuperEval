@@ -22,8 +22,8 @@ class Settings:
     # the full snapshot (downloaded by app.data.fetch_snapshot) if present, else the committed sample
     snapshot_dir: Path = Path(os.getenv("SNAPSHOT_DIR") or (
         ROOT / "data" / "snapshot" if (ROOT / "data" / "snapshot" / "meta.json").exists() else ROOT / "data" / "sample"))
-    daily_budget_usd: float = float(os.getenv("DAILY_BUDGET_USD", "2.0"))
-    rate_limit_per_hour: int = int(os.getenv("RATE_LIMIT_PER_HOUR", "30"))
+    daily_budget_usd: float = float(os.getenv("DAILY_BUDGET_USD", "2.0"))  # spend alert threshold only
+    user_daily_budget_usd: float = float(os.getenv("USER_DAILY_BUDGET_USD", "1.0"))  # the one usage cap
     judge_sample_rate: float = float(os.getenv("JUDGE_SAMPLE_RATE", "0.3"))
     alert_webhook_url: str | None = os.getenv("ALERT_WEBHOOK_URL") or None
     api_url: str = os.getenv("API_URL", "http://127.0.0.1:8000")

@@ -80,6 +80,44 @@ def gate_failures(summary: dict) -> list[str]:
     return fails
 
 
+def run_bench(items: list[dict], version: str, live: bool, model: str | None = None, max_cost: float | None = None,
+              workers: int = 4, on_progress=None, record: bool = True, include_drafts: bool = False,
+              trigger: str = "cli", user_key: str | None = None) -> dict:
+    """Run golden items through the analyst and score them. `on_progress(row)` fires per question; the run stops
+    once spend passes `max_cost`. Appends the run to RUNS when `record` and returns it."""
+    rows, spent = [], 0.0
+    with ThreadPoolExecutor(workers if live else 1) as pool:
+        for r in pool.map(lambda it: run_one(it, version, live, model), items):
+            rows.append(r)
+            spent += r["cost_usd"]
+            if on_progress:
+                on_progress(r)
+            if max_cost is not None and spent > max_cost:
+                print(f"stopping: ${spent:.3f} > max cost ${max_cost:.3f}", file=sys.stderr)
+                pool.shutdown(wait=False, cancel_futures=True)
+                break
+    summary = summarize(rows)
+    rec = {"at": datetime.now(UTC).isoformat(timespec="seconds"), "version": version,
+           "model": model or (settings.agent_model if live else "sim"), "live": live,
+           "reviewed_only": not include_drafts, "include_drafts": include_drafts, "trigger": trigger,
+           "user_key": user_key, "summary": summary, "gate_failures": gate_failures(summary), "rows": rows}
+    if record:
+        RUNS.parent.mkdir(parents=True, exist_ok=True)
+        with RUNS.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(rec, ensure_ascii=False, default=str) + "\n")
+    return rec
+
+
+def latest_run(live_only: bool = False) -> dict | None:
+    """The most recent recorded run (a live one if any exist, unless there are none and live_only is False)."""
+    if not RUNS.exists():
+        return None
+    runs = [json.loads(x) for x in RUNS.read_text(encoding="utf-8").splitlines() if x.strip()]
+    live = [r for r in runs if r.get("live")]
+    pool = live if (live or live_only) else runs
+    return pool[-1] if pool else None
+
+
 def markdown(meta: dict, summary: dict, rows: list[dict], fails: list[str]) -> str:
     o = summary["overall"]
     lines = [f"### Analyst benchmark: `{meta['version']}` on `{meta['model']}` "
@@ -124,29 +162,19 @@ def main() -> None:
     if not items:
         print("no golden items (approve some in the review queue, or pass --include-drafts)", file=sys.stderr)
         sys.exit(2)
-    model = args.model or (settings.agent_model if args.live else "sim")
-    rows, spent = [], 0.0
-    with ThreadPoolExecutor(args.workers if args.live else 1) as pool:
-        for r in pool.map(lambda it: run_one(it, args.version, args.live, args.model), items):
-            rows.append(r)
-            spent += r["cost_usd"]
-            print(f"{r['id']} {'✓' if r['passed'] else '✗'} ${spent:.3f}", file=sys.stderr, flush=True)
-            if spent > args.max_cost:
-                print(f"stopping: ${spent:.3f} > --max-cost", file=sys.stderr)
-                break
-    summary = summarize(rows)
-    meta = {"at": datetime.now(UTC).isoformat(timespec="seconds"), "version": args.version, "model": model,
-            "live": args.live, "reviewed_only": not args.include_drafts}
-    fails = gate_failures(summary)
-    md = markdown(meta, summary, rows, fails)
+    spent = [0.0]
+
+    def progress(r: dict) -> None:
+        spent[0] += r["cost_usd"]
+        print(f"{r['id']} {'✓' if r['passed'] else '✗'} ${spent[0]:.3f}", file=sys.stderr, flush=True)
+
+    rec = run_bench(items, args.version, args.live, model=args.model, max_cost=args.max_cost, workers=args.workers,
+                    on_progress=progress, record=args.record, include_drafts=args.include_drafts)
+    md = markdown(rec, rec["summary"], rec["rows"], rec["gate_failures"])
     print(md)
     if os.getenv("GITHUB_STEP_SUMMARY"):
         Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a", encoding="utf-8").write(md + "\n")
-    if args.record:
-        RUNS.parent.mkdir(parents=True, exist_ok=True)
-        with RUNS.open("a", encoding="utf-8") as f:
-            f.write(json.dumps({**meta, "summary": summary, "rows": rows}, ensure_ascii=False, default=str) + "\n")
-    if args.gate and fails:
+    if args.gate and rec["gate_failures"]:
         sys.exit(1)
 
 

@@ -110,3 +110,13 @@ h1, h2, h3 { letter-spacing: -0.01em; }
 .pill { background: var(--pw-gold-600); }
 /* white text doesn't read on the light gold primary */
 [data-testid="stBaseButton-primary"], [data-testid="stBaseButton-primary"] p { color: #0d3c68 !important; }
+
+/* ---- KPI definitions (tiles(..., help)) ---- */
+.tile .label .tip { position: relative; cursor: help; opacity: 0.7; font-size: 0.78rem; outline: none; }
+.tile .label .tip:hover, .tile .label .tip:focus { opacity: 1; }
+.tile .label .tip:hover::after, .tile .label .tip:focus::after {
+  content: attr(data-tip); position: absolute; left: 50%; top: 1.5em; transform: translateX(-50%); z-index: 20;
+  width: max-content; max-width: 240px; padding: 8px 10px; border-radius: 8px; white-space: normal;
+  font-size: 0.78rem; font-weight: 400; line-height: 1.35; text-align: left;
+  background: rgba(20, 20, 20, 0.92); color: #fff; box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+}

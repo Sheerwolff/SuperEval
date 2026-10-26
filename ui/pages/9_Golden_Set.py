@@ -12,8 +12,10 @@ from lib import setup, tiles
 setup("Golden set", "🏅")
 st.markdown("## 🏅 Golden set · review queue")
 st.caption("The benchmark that gates releases: fixed questions with reference SQL. Expected answers are computed "
-           "live from today's data, so prices can change without the references going stale. A draft gates CI only "
-           "after a human approves it here.")
+           "live from today's data, so prices can change without the references going stale. It grows from three "
+           "places: this queue, the Trace explorer's 'Add to golden set', and every disagreement in Chat. Those "
+           "drafts start with the agent's own SQL as the reference, so check it before approving. A draft gates CI "
+           "only after a human approves it here.")
 owner_unlock()
 is_owner = role() == "owner"
 
@@ -27,7 +29,8 @@ counts = df.status.value_counts().to_dict()
 tiles([("Approved", str(counts.get("approved", 0)), f"of {len(df)} · gate CI", False),
        ("Drafts to review", str(counts.get("draft", 0)), "not gating yet", False),
        ("Rejected", str(counts.get("rejected", 0)), "excluded", False),
-       ("Promoted from traces", str((df.source == "promoted").sum()), "from the Review page", False)])
+       ("From traces & chat", str(df.source.isin(["promoted", "trace", "feedback"]).sum()),
+        "Review page · Trace explorer · Chat", False)])
 st.progress(counts.get("approved", 0) / len(df), text=f"{counts.get('approved', 0)}/{len(df)} reviewed and approved")
 
 f1, f2, f3 = st.columns(3)

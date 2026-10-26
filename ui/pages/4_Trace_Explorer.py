@@ -2,7 +2,8 @@ import pandas as pd
 import streamlit as st
 from sqlalchemy import select
 
-from app.db import EvalResult, SessionLocal, Trace
+from app.db import EvalResult, GoldenItem, SessionLocal, Trace
+from app.evals.human import draft_from_trace
 from lib import eval_badges, setup
 from render import render_chart, render_queries
 
@@ -52,6 +53,7 @@ with SessionLocal() as s:
     meta = (f"{t.created_at:%Y-%m-%d %H:%M} UTC · {t.source} · {t.model} · {t.steps} steps · "
             f"{t.latency_ms / 1000:.1f}s · {t.input_tokens + t.output_tokens:,} tokens · ${t.cost_usd:.4f}")
     evals = [{"evaluator": e.evaluator, "kind": e.kind, "passed": e.passed, "details": e.details} for e in t.evals]
+    in_golden = s.execute(select(GoldenItem.id).where(GoldenItem.source_trace_id == t.id)).scalar()
 
 st.divider()
 a, b = st.columns([3, 2], gap="large")
@@ -73,3 +75,8 @@ with b:
     judge = next((e for e in evals if e["kind"] == "judge" and e["details"].get("reasoning")), None)
     if judge:
         st.caption(f"Judge ({judge['details'].get('judge_model')}): {judge['details']['reasoning']}")
+    if in_golden:
+        st.caption(f"🏅 In the golden set as **{in_golden}**.")
+    elif st.button("🏅 Add to golden set", key=f"golden_{trace_id}", use_container_width=True):
+        draft_from_trace(trace_id, "trace", "Added from the Trace explorer.")
+        st.rerun()

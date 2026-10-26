@@ -1,8 +1,10 @@
 """Shared UI helpers: API client, cached data loaders, theme and chart styling."""
 from __future__ import annotations
 
+import hashlib
 import sys
 from datetime import timedelta
+from html import escape
 from pathlib import Path
 
 import httpx
@@ -66,7 +68,7 @@ def setup(title: str, icon: str = "📊") -> None:
         connect_compact()
 
 
-PAGES = ["", "Chat", "Price_Explorer", "Live_Monitor", "Trace_Explorer", "Judge_Monitor", "Architecture",
+PAGES = ["", "Chat", "Price_Explorer", "Agent_Evals", "Trace_Explorer", "Judge_Monitor", "Architecture",
          "Golden_Set", "Review"]
 THEMES = {"☀️ Light": "Light", "🌙 Dark": "Dark", "💻 Auto": "System"}
 
@@ -94,14 +96,26 @@ def theme_switch() -> None:
         )
 
 
-def tiles(items: list[tuple[str, str, str, bool]]) -> None:
-    """KPI tiles as a wrapping grid (reflows to 2 columns on phones). items: (label, value, sub, bad)."""
-    html = "".join(
-        f"<div class='tile{' bad' if bad else ''}'><div class='label'>{label}</div>"
-        f"<div class='value'>{value}</div><div class='sub'>{sub}</div></div>"
-        for label, value, sub, bad in items
-    )
+def tiles(items: list[tuple]) -> None:
+    """KPI tiles as a wrapping grid (reflows to 2 columns on phones). items: (label, value, sub, bad[, help]);
+    `help` adds an ⓘ next to the label that shows the definition on hover or tap."""
+    html = ""
+    for label, value, sub, bad, *rest in items:
+        tip = ""
+        if rest and rest[0]:
+            tip = f" <span class='tip' tabindex='0' data-tip='{escape(rest[0], quote=True)}'>ⓘ</span>"
+        html += (f"<div class='tile{' bad' if bad else ''}'><div class='label'>{label}{tip}</div>"
+                 f"<div class='value'>{value}</div><div class='sub'>{sub}</div></div>")
     st.markdown(f"<div class='tile-grid'>{html}</div>", unsafe_allow_html=True)
+
+
+def user_key() -> str:
+    """Who pays for live LLM calls: a hash of the visitor's IP (first X-Forwarded-For hop behind a proxy). Streamlit
+    reports no IP for localhost connections, so those share one 'localhost' key. Sent to the API, which only ever
+    sees this server."""
+    headers = st.context.headers or {}
+    ip = (headers.get("X-Forwarded-For") or "").split(",")[0].strip() or st.context.ip_address or "localhost"
+    return hashlib.sha256(ip.encode()).hexdigest()[:32]
 
 
 # ---- API ---------------------------------------------------------------

@@ -8,7 +8,7 @@ import streamlit as st
 from app.config import settings
 from app.evals.human import save_judge_feedback
 from components import role
-from lib import eval_badges, setup
+from lib import eval_badges, setup, user_key
 from render import render_chart, render_queries
 
 setup("Chat with the agent", "💬")
@@ -40,7 +40,8 @@ def short_sql(sql: str, n: int = 70) -> str:
 
 
 def stream_chat(question: str, history: list[dict], status) -> dict | None:
-    payload = {"question": question, "session_id": st.session_state.session_id, "history": history}
+    payload = {"question": question, "session_id": st.session_state.session_id, "user_key": user_key(),
+               "history": history}
     steps = 0
     try:
         with httpx.stream("POST", settings.api_url + "/chat/stream", json=payload, timeout=150) as r:
@@ -134,8 +135,9 @@ def render_card(msg: dict) -> None:
                f"{msg['input_tokens'] + msg['output_tokens']:,} tokens · ${msg['cost_usd']:.4f} · "
                f"trace `{msg['id'][:8]}`")
     if msg.get("mode") == "sim":
-        reason = {"no_api_key": "no API key configured", "rate_limited": "you hit the hourly rate limit",
-                  "daily_budget_exhausted": "today's LLM budget is used up"}.get(msg.get("mode_reason"), "")
+        reason = {"no_api_key": "no API key configured",
+                  "user_budget_exhausted": f"you've used today's ${settings.user_daily_budget_usd:.0f} of live "
+                                           "LLM calls"}.get(msg.get("mode_reason"), "")
         st.info(f"Served by the simulated analyst ({reason}). Evals run the same way.")
 
 

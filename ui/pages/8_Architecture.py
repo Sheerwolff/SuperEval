@@ -91,9 +91,8 @@ incidents under five random seeds.
 **Model-written SQL, safely.** The DuckDB connection is read-only, takes a single SELECT, has external access
 disabled, a timeout and a row cap. Charts are declarative specs rendered by the app; no model-written code runs.
 
-**A public demo with a budget.** A rate limit and a daily USD cap guard the live model. Past them, a simulator that
-runs real SQL on the real snapshot answers instead, and is labelled as such. The fault-injection buttons on *Live
-monitor* use the same simulator.
+**A public demo with a budget.** Each visitor gets $1 of live LLM calls a day, across chat and golden-set runs. Past
+it, a simulator that runs real SQL on the real snapshot answers instead, and is labelled as such.
 
 ### Stack
 Python · FastAPI (SSE) · OpenAI SDK (function calling, Structured Outputs) · DuckDB · SQLAlchemy (SQLite locally,

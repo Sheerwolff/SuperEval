@@ -61,7 +61,12 @@ Fault = Literal["none", "degraded_method", "schema_broken", "lenient_judge", "sl
 class ChatIn(BaseModel):
     question: str = Field(min_length=1, max_length=1000)
     session_id: str = Field(default="anon", max_length=64)
+    user_key: str | None = Field(default=None, max_length=64)  # who pays: the UI sends a hashed client IP
     history: list[dict] = Field(default_factory=list)
+
+
+class BenchIn(BaseModel):
+    user_key: str = Field(min_length=1, max_length=64)
 
 
 class SimulateIn(BaseModel):
@@ -80,6 +85,10 @@ def _trace_json(t: Trace, evals=None) -> dict:
         "evals": [{"evaluator": e.evaluator, "kind": e.kind, "score": e.score, "passed": e.passed,
                    "details": e.details} for e in evals],
     }
+
+
+def _user(body: ChatIn, request: Request) -> str:
+    return body.user_key or f"{body.session_id}:{request.client.host if request.client else '-'}"
 
 
 def _answer(question: str, session_id: str, history: list[dict], mode: str, on_event=None):
@@ -101,10 +110,12 @@ def health():
 
 @app.post("/chat")
 def chat(body: ChatIn, request: Request):
-    key = f"{body.session_id}:{request.client.host if request.client else '-'}"
+    key = _user(body, request)
     mode, reason = guard.mode_for(key)
     history = [m for m in body.history if m.get("role") in ("user", "assistant")][-6:]
     trace, evals = _answer(body.question, body.session_id, history, mode)
+    if mode == "live":
+        guard.charge(key, trace.cost_usd)
     maybe_run_monitors()
     return {"mode": mode, "mode_reason": reason, **_trace_json(trace, evals)}
 
@@ -113,7 +124,7 @@ def chat(body: ChatIn, request: Request):
 def chat_stream(body: ChatIn, request: Request):
     """Server-sent events: `tool_start`/`tool_end` per query as the analyst works, `answer` when it
     writes the final answer, then `done` with the full trace and its evals (same payload as /chat)."""
-    key = f"{body.session_id}:{request.client.host if request.client else '-'}"
+    key = _user(body, request)
     mode, reason = guard.mode_for(key)
     history = [m for m in body.history if m.get("role") in ("user", "assistant")][-6:]
     events: queue.Queue = queue.Queue()
@@ -121,6 +132,8 @@ def chat_stream(body: ChatIn, request: Request):
     def work():
         try:
             trace, evals = _answer(body.question, body.session_id, history, mode, on_event=events.put)
+            if mode == "live":
+                guard.charge(key, trace.cost_usd)
             events.put({"type": "done", "mode": mode, "mode_reason": reason, **_trace_json(trace, evals)})
         except Exception as exc:  # surface failures to the client instead of hanging the stream
             events.put({"type": "error", "message": f"{type(exc).__name__}: {exc}"})
@@ -158,6 +171,54 @@ def simulate(body: SimulateIn):
 
         run_canaries(live=False, leniency=0.85, judge_model="sim-judge (updated)")
     return {"generated": body.n, "fault": body.fault, **run_monitors()}
+
+
+# ---- golden-set test runs -------------------------------------------------------
+_bench_lock = threading.Lock()
+_bench: dict = {"running": False, "done": 0, "total": 0, "passed": 0, "started_at": None, "last_error": None}
+
+
+@app.post("/bench/run")
+def bench_run(body: BenchIn):
+    """Start a live golden-set run (approved + draft items) in the background. Each question's cost is charged
+    to the user, and the run stops once they reach their daily budget."""
+    from app.evals import bench, golden
+
+    if not settings.live_llm:
+        raise HTTPException(400, "No API key configured, so the live agent can't run.")
+    remaining = guard.remaining(body.user_key)
+    if remaining <= 0:
+        raise HTTPException(429, f"You've used today's ${guard.budget:.2f} of live LLM calls.")
+    items = golden.load(("approved", "draft"))
+    if not items:
+        raise HTTPException(400, "The golden set is empty.")
+    if not _bench_lock.acquire(blocking=False):
+        raise HTTPException(409, "A golden-set run is already in progress.")
+    _bench.update(running=True, done=0, total=len(items), passed=0, started_at=time.time(), last_error=None)
+
+    def progress(row: dict) -> None:
+        guard.charge(body.user_key, row["cost_usd"])
+        _bench["done"] += 1
+        _bench["passed"] += int(bool(row["passed"]))
+
+    def work():
+        try:
+            bench.run_bench(items, settings.prompt_version, live=True, max_cost=remaining, on_progress=progress,
+                            include_drafts=True, trigger="ui", user_key=body.user_key)
+        except Exception as exc:  # report on the status endpoint instead of dying silently
+            _bench["last_error"] = f"{type(exc).__name__}: {exc}"
+        finally:
+            _bench["running"] = False
+            _bench_lock.release()
+
+    threading.Thread(target=work, daemon=True).start()
+    return {"started": True, "total": len(items)}
+
+
+@app.get("/bench/status")
+def bench_status(user_key: str | None = None):
+    spent = guard.spent_today(user_key) if user_key else None
+    return {**_bench, "spent_today": spent, "budget": guard.budget, "live_llm": settings.live_llm}
 
 
 @app.get("/traces")

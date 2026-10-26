@@ -91,7 +91,12 @@ def save_judge_feedback(trace_id: str, role: str, reviewer: str | None, agree: b
                            disputed=[] if agree else list(disputed or []), note=(note or "").strip() or None)
         s.add(fb)
         s.commit()
-        return fb.id
+        fid = fb.id
+    if not agree:  # every disagreement goes into the golden set as a draft for the owner to check
+        what = ", ".join(disputed or []) or "no specific check"
+        draft_from_trace(trace_id, "feedback", f"From chat feedback: disputed {what}." + (
+            f" Note: {note.strip()}" if (note or "").strip() else ""))
+    return fid
 
 
 def judge_feedback_summary(since=None, session=None) -> dict:
@@ -136,18 +141,49 @@ def judge_feedback_summary(since=None, session=None) -> dict:
             "disputed": disputed, "recent": recent}
 
 
-def _guess_shape(trace: Trace, judgment: HumanJudgment) -> tuple[str, str, dict]:
-    """(qtype, answer_type, answer_key) draft for a promoted trace; the owner fixes it in the queue."""
-    if "should have declined" in (judgment.tags or []):
+def _guess_shape(trace: Trace, tags=(), corrected_sql: str | None = None) -> tuple[str, str, dict]:
+    """(qtype, answer_type, answer_key) draft for a trace going into the golden set; the owner fixes it in the queue."""
+    if "should have declined" in tags:
         return "trap_unanswerable", "decline", {}
-    if "ignored ambiguity" in (judgment.tags or []):
+    if "ignored ambiguity" in tags:
         return "trap_ambiguous", "assumption", {}
-    sql = judgment.corrected_sql or next(
-        (q["sql"] for q in (trace.tool_calls or []) if not q.get("error")), None)
+    sql = corrected_sql or next((q["sql"] for q in (trace.tool_calls or []) if not q.get("error")), None)
     cols = next((q["columns"] for q in (trace.tool_calls or []) if q.get("sql") == sql), []) if sql else []
     if re.search(r"chain_price_index|which chain|cheapest|priciest|most expensive", trace.question, re.I):
         return "comparison", "ranking", {"column": cols[0] if cols else "chain"}
     return "lookup", "scalar", {"column": cols[0] if cols else "v"}
+
+
+def draft_from_trace(trace_id: str, source: str, notes: str, tags=(), corrected_sql: str | None = None,
+                     session=None) -> str:
+    """Add a trace's question to the golden set as a draft (source: promoted | trace | feedback). The reference SQL
+    is the correction if given, else the agent's own first working query, so the owner should check it. One item
+    per trace: returns the existing item's id if the trace is already in the set."""
+    own = session is None
+    s = session or SessionLocal()
+    try:
+        existing = s.execute(select(GoldenItem.id).where(GoldenItem.source_trace_id == trace_id)).scalar()
+        if existing:
+            return existing
+        t = s.get(Trace, trace_id)
+        if t is None:
+            raise ValueError(f"no trace {trace_id}")
+        qtype, answer_type, key = _guess_shape(t, tags or (), corrected_sql)
+        sql = None if answer_type in ("decline", "assumption") else (
+            corrected_sql or next((q["sql"] for q in (t.tool_calls or []) if not q.get("error")), None))
+        n = s.execute(select(func.count(GoldenItem.id))).scalar_one()
+        gid = f"g{n + 1:03d}"
+        while s.get(GoldenItem, gid):
+            n += 1
+            gid = f"g{n + 1:03d}"
+        s.add(GoldenItem(id=gid, question=t.question, language=detect_language(t.question), qtype=qtype,
+                         difficulty="medium", answer_type=answer_type, reference_sql=sql, answer_key=key,
+                         status="draft", source=source, source_trace_id=t.id, notes=notes))
+        s.commit()
+        return gid
+    finally:
+        if own:
+            s.close()
 
 
 def promote(judgment_id: int) -> str:
@@ -158,20 +194,10 @@ def promote(judgment_id: int) -> str:
             raise ValueError("only owner judgments can be promoted")
         if j.promoted_to:
             return j.promoted_to
-        t = s.get(Trace, j.trace_id)
-        qtype, answer_type, key = _guess_shape(t, j)
-        sql = None if answer_type in ("decline", "assumption") else (
-            j.corrected_sql or next((q["sql"] for q in (t.tool_calls or []) if not q.get("error")), None))
-        n = s.execute(select(func.count(GoldenItem.id))).scalar_one()
-        gid = f"g{n + 1:03d}"
-        while s.get(GoldenItem, gid):
-            n += 1
-            gid = f"g{n + 1:03d}"
         notes = "Promoted from a reviewed trace." + (f" Human correction: {j.corrected_answer}" if j.corrected_answer
                                                        else "")
-        s.add(GoldenItem(id=gid, question=t.question, language=detect_language(t.question), qtype=qtype,
-                         difficulty="medium", answer_type=answer_type, reference_sql=sql, answer_key=key,
-                         status="draft", source="promoted", source_trace_id=t.id, notes=notes))
+        gid = draft_from_trace(j.trace_id, "promoted", notes, tags=j.tags or (), corrected_sql=j.corrected_sql,
+                               session=s)
         j.promoted_to = gid
         s.commit()
         return gid

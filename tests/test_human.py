@@ -5,6 +5,7 @@ import pytest
 from app.db import EvalResult, GoldenItem, HumanJudgment, JudgeFeedback, SessionLocal, Trace, init_db
 from app.evals.human import (
     agreement,
+    draft_from_trace,
     judge_feedback_summary,
     judgments_frame,
     override_rate,
@@ -90,3 +91,19 @@ def test_judge_feedback_summary(traces):
     assert d.loc["judge_answers"].tolist() == [0, 0, 1]  # no stored result for it: counted, but unsplit
     assert out["disputed"].evaluator.iloc[0] == "method_lint"
     assert out["recent"].note.tolist() == [None, "lint missed it"]  # newest first
+
+
+def test_golden_drafts_from_traces_and_feedback(traces):
+    bad, good = traces
+    gid = draft_from_trace(good, "trace", "from the explorer")
+    assert draft_from_trace(good, "trace", "again") == gid  # one item per trace
+    with SessionLocal() as s:
+        g = s.get(GoldenItem, gid)
+        assert g.status == "draft" and g.source == "trace" and "chain_price_index" in g.reference_sql
+    save_judge_feedback(bad, "visitor", "x", agree=True)
+    with SessionLocal() as s:
+        assert not s.query(GoldenItem).filter_by(source_trace_id=bad).count()  # agreeing adds nothing
+    save_judge_feedback(bad, "visitor", "x", agree=False, disputed=["method_lint"], note="fine to me")
+    with SessionLocal() as s:
+        g = s.query(GoldenItem).filter_by(source_trace_id=bad).one()
+        assert g.source == "feedback" and "method_lint" in g.notes and "fine to me" in g.notes

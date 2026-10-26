@@ -131,6 +131,16 @@ class JudgeFeedback(Base):
     note: Mapped[str | None] = mapped_column(Text)
 
 
+class UserSpend(Base):
+    """Live LLM spend per user per day (chat + golden-set runs), for the $1/user/day cap."""
+
+    __tablename__ = "user_spend"
+
+    user_key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    day: Mapped[str] = mapped_column(String(10), primary_key=True)  # UTC date, YYYY-MM-DD
+    usd: Mapped[float] = mapped_column(Float, default=0.0)
+
+
 class GoldenItem(Base):
     """One benchmark question. Drafts become CI-gating only once a human approves them
     (golden-set review queue); items can also be promoted from human-judged traces."""
