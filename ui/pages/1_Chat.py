@@ -9,7 +9,7 @@ from app.config import settings
 from lib import eval_badges, setup
 from render import render_chart, render_queries
 
-setup("Ask the analyst", "💬")
+setup("Chat with the agent", "💬")
 
 if "session_id" not in st.session_state:
     st.session_state.session_id = uuid.uuid4().hex[:12]
@@ -104,10 +104,8 @@ def render_card(msg: dict) -> None:
 
 
 # ---- page --------------------------------------------------------------------
-st.markdown("## 💬 Ask the analyst")
-st.caption("Ask an analytical question about grocery prices in Israel, in Hebrew or English. The analyst queries "
-           "today's published prices from 8 chains in 25 cities, shows its queries and method, and every answer "
-           "is evaluated on the spot.")
+st.markdown("## 💬 Chat with the agent")
+st.caption("Ask about Israeli grocery prices. Every answer is evaluated live.")
 
 clicked = st.session_state.pop("queued_prompt", None)
 if not st.session_state.messages:
@@ -156,8 +154,7 @@ with card_col:
         render_card(last["trace"])
     else:
         st.markdown("**Eval scorecard**")
-        st.caption("Send a question to see how its answer is evaluated: every number is re-checked against the query "
-                   "it cites, the SQL method is linted, and an LLM judge reviews the analysis.")
+        st.caption("Send a question to see its answer evaluated.")
     if st.session_state.messages and st.button("Clear conversation"):
         st.session_state.messages = []
         st.rerun()
