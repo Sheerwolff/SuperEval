@@ -9,6 +9,7 @@ from sqlalchemy import select
 from app.db import Alert, SessionLocal, utcnow
 from app.evals.analyst_judge import RUBRIC_HASH
 from app.evals.calibration import agreement
+from app.evals.human import judge_feedback_summary
 from app.evals.judge_monitor import JUDGE_METRICS, canary_runs, load_canaries, load_judge_frame
 from lib import SEVERITY, base_layout, incident_windows, ink, series, setup, tiles
 
@@ -34,8 +35,8 @@ with SessionLocal() as s:
                          .limit(50)).scalars().all()
 open_alerts = [a for a in j_alerts if a.status == "open"]
 
-overview, canary_tab, bias_tab, human_tab = st.tabs(["Overview", "Canaries", "Bias & consistency",
-                                                     "Calibrate with human labels"])
+overview, canary_tab, bias_tab, human_tab, feedback_tab = st.tabs(
+    ["Overview", "Canaries", "Bias & consistency", "Calibrate with human labels", "Chat feedback"])
 
 # ---- overview -----------------------------------------------------------------
 with overview:
@@ -173,3 +174,47 @@ with human_tab:
         items.append((name, val, sub, bool(r and r["kappa"] is not None and r["n"] >= 30 and r["kappa"] < 0.6)))
     tiles(items)
     st.page_link("pages/10_Review.py", label="Judge traces on the Review page", icon="🧑‍⚖️")
+
+# ---- chat feedback ------------------------------------------------------------------
+with feedback_tab:
+    st.caption("Chat users can say whether they agree with the verdicts on an answer, and pick the checks they think "
+               "are wrong. Disputing a ✓ suggests the check is too lenient; disputing a ✗, too strict. Last 30 days.")
+    fb = judge_feedback_summary(since=now - timedelta(days=30))
+    top = fb["disputed"].iloc[0] if len(fb["disputed"]) else None
+
+    def check_name(evaluator: str) -> str:
+        return evaluator.replace("judge_", "judge · ").replace("_", " ")
+
+    tiles([
+        ("Feedback received", f"{fb['n']:,}", "answers rated in chat", False),
+        ("Agrees with the verdicts", "—" if fb["agree_rate"] is None else f"{fb['agree_rate']:.0%}",
+         f"{fb['n_disagree']} disagreed", False),
+        ("Most disputed check", "—" if top is None else check_name(top.evaluator),
+         "" if top is None else f"{top.total}× · ✓ {top.said_pass} · ✗ {top.said_fail}", False),
+    ])
+    if fb["n"] == 0:
+        st.info("No feedback yet. It appears here once someone answers 'Do you agree with these verdicts?' in Chat.")
+    elif fb["disputed"].empty:
+        st.success("Everyone who rated an answer agreed with its verdicts.")
+    else:
+        d = fb["disputed"].iloc[::-1]  # most disputed on top
+        names = d.evaluator.map(check_name)
+        fig = go.Figure()
+        for col, label, color in (("said_pass", "check said ✓ (too lenient?)", S["v1"]),
+                                  ("said_fail", "check said ✗ (too strict?)", S["v2"])):
+            fig.add_trace(go.Bar(y=names, x=d[col], name=label, orientation="h", marker_color=color,
+                                 hovertemplate="%{x}×<extra>" + label + "</extra>"))
+        other = d.total - d.said_pass - d.said_fail
+        if other.sum():
+            fig.add_trace(go.Bar(y=names, x=other, name="no stored verdict", orientation="h",
+                                 marker_color=INK["muted"], hovertemplate="%{x}×<extra>no stored verdict</extra>"))
+        base_layout(fig, height=max(200, 60 + 34 * len(d)), title="Which checks get disputed")
+        fig.update_layout(barmode="stack", legend_traceorder="normal")
+        fig.update_xaxes(title="times disputed", dtick=1 if d.total.max() <= 10 else None)
+        st.plotly_chart(fig, use_container_width=True)
+        st.markdown("**Latest disagreements**")
+        recent = fb["recent"].assign(disputed=fb["recent"].disputed.map(
+            lambda ev: ", ".join(check_name(e) for e in ev) or "—"))
+        st.dataframe(recent, hide_index=True, use_container_width=True,
+                     column_config={"created_at": st.column_config.DatetimeColumn("when", format="MMM D HH:mm"),
+                                    "question": st.column_config.TextColumn(width="large")})

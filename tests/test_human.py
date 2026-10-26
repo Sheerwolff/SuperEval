@@ -2,8 +2,15 @@ import uuid
 
 import pytest
 
-from app.db import EvalResult, GoldenItem, HumanJudgment, SessionLocal, Trace, init_db
-from app.evals.human import agreement, judgments_frame, override_rate, promote
+from app.db import EvalResult, GoldenItem, HumanJudgment, JudgeFeedback, SessionLocal, Trace, init_db
+from app.evals.human import (
+    agreement,
+    judge_feedback_summary,
+    judgments_frame,
+    override_rate,
+    promote,
+    save_judge_feedback,
+)
 
 
 @pytest.fixture()
@@ -25,6 +32,7 @@ def traces():
     yield ids
     with SessionLocal() as s:
         s.query(HumanJudgment).filter(HumanJudgment.trace_id.in_(ids)).delete()
+        s.query(JudgeFeedback).filter(JudgeFeedback.trace_id.in_(ids)).delete()
         s.query(GoldenItem).filter(GoldenItem.source_trace_id.in_(ids)).delete()
         s.query(EvalResult).filter(EvalResult.trace_id.in_(ids)).delete()
         s.query(Trace).filter(Trace.id.in_(ids)).delete()
@@ -55,3 +63,30 @@ def test_override_rate_agreement_and_promotion(traces):
         vid = s.query(HumanJudgment).filter_by(trace_id=good, role="visitor").one().id
     with pytest.raises(ValueError):
         promote(vid)  # visitors can't promote
+
+
+def test_judge_feedback(traces):
+    bad, good = traces
+    agree_id = save_judge_feedback(good, "visitor", "sess1", agree=True, disputed=["method_lint"], note="  ")
+    disagree_id = save_judge_feedback(bad, "visitor", "sess1", agree=False, disputed=["method_lint"],
+                                      note="the method looks fine to me")
+    with SessionLocal() as s:
+        ok, no = s.get(JudgeFeedback, agree_id), s.get(JudgeFeedback, disagree_id)
+    assert ok.agree and ok.disputed == [] and ok.note is None  # agreeing disputes nothing
+    assert not no.agree and no.disputed == ["method_lint"] and no.note == "the method looks fine to me"
+
+
+def test_judge_feedback_summary(traces):
+    bad, good = traces  # method_lint failed on `bad`, passed on `good`
+    with SessionLocal() as s:
+        since = s.query(Trace).filter(Trace.id == bad).one().created_at
+    save_judge_feedback(good, "visitor", "a", agree=True)
+    save_judge_feedback(good, "visitor", "b", agree=False, disputed=["method_lint"], note="lint missed it")
+    save_judge_feedback(bad, "owner", None, agree=False, disputed=["method_lint", "judge_answers"])
+    out = judge_feedback_summary(since=since)
+    assert out["n"] == 3 and out["n_disagree"] == 2 and abs(out["agree_rate"] - 1 / 3) < 1e-9
+    d = out["disputed"].set_index("evaluator")
+    assert d.loc["method_lint"].tolist() == [1, 1, 2]  # disputed once as a pass (lenient), once as a fail (strict)
+    assert d.loc["judge_answers"].tolist() == [0, 0, 1]  # no stored result for it: counted, but unsplit
+    assert out["disputed"].evaluator.iloc[0] == "method_lint"
+    assert out["recent"].note.tolist() == [None, "lint missed it"]  # newest first

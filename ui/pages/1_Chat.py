@@ -6,6 +6,8 @@ import httpx
 import streamlit as st
 
 from app.config import settings
+from app.evals.human import save_judge_feedback
+from components import role
 from lib import eval_badges, setup
 from render import render_chart, render_queries
 
@@ -75,6 +77,37 @@ def follow_ups(trace: dict) -> list[str]:
     return ["And in Jerusalem?", "Which categories show the biggest gap?"]
 
 
+def eval_label(e: dict) -> str:
+    name = e["evaluator"].replace("judge_", "judge · ").replace("_", " ")
+    return f"{'✓' if e['passed'] else '✗'} {name}"
+
+
+def judge_feedback(msg: dict, verdicts: list[dict]) -> None:
+    """Agree / disagree with the verdicts above; disagreeing asks which checks look wrong."""
+    key = f"fb_{msg['id']}"
+    if st.session_state.get(key) == "saved":
+        st.caption("Thanks, your feedback on these verdicts was saved.")
+        return
+    st.markdown("**Do you agree with these verdicts?**")
+    a, b = st.columns(2)
+    if a.button("👍 Yes", key=f"{key}_yes", use_container_width=True):
+        save_judge_feedback(msg["id"], role(), st.session_state.session_id, agree=True)
+        st.session_state[key] = "saved"
+        st.rerun()
+    if b.button("👎 No", key=f"{key}_no", use_container_width=True):
+        st.session_state[key] = "disagree"
+    if st.session_state.get(key) == "disagree":
+        labels = {e["evaluator"]: eval_label(e) for e in verdicts}
+        with st.form(f"{key}_form"):
+            disputed = st.multiselect("Which verdicts look wrong?", list(labels), format_func=labels.get)
+            note = st.text_input("Why? (optional)")
+            if st.form_submit_button("Send feedback", type="primary"):
+                save_judge_feedback(msg["id"], role(), st.session_state.session_id, agree=False,
+                                    disputed=disputed, note=note)
+                st.session_state[key] = "saved"
+                st.rerun()
+
+
 def render_card(msg: dict) -> None:
     evals = msg["evals"]
     det = [e for e in evals if e["kind"] == "deterministic"]
@@ -94,6 +127,9 @@ def render_card(msg: dict) -> None:
         msg_ = e["details"].get("message")
         if msg_:
             st.warning(msg_)
+    verdicts = [e for e in evals if e["passed"] is not None]
+    if verdicts:
+        judge_feedback(msg, verdicts)
     st.caption(f"{msg['model']} · {msg['steps']} steps · {msg['latency_ms'] / 1000:.1f}s · "
                f"{msg['input_tokens'] + msg['output_tokens']:,} tokens · ${msg['cost_usd']:.4f} · "
                f"trace `{msg['id'][:8]}`")

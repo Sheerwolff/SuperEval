@@ -8,7 +8,7 @@ import pandas as pd
 from sqlalchemy import func, select
 
 from app.agent.textutil import detect_language
-from app.db import EvalResult, GoldenItem, HumanJudgment, SessionLocal, Trace
+from app.db import EvalResult, GoldenItem, HumanJudgment, JudgeFeedback, SessionLocal, Trace
 
 FAILURE_TAGS = ["wrong number", "ungrounded number", "bad method", "ignored ambiguity", "should have declined",
                 "declined wrongly", "misleading chart", "wrong language", "other"]
@@ -81,6 +81,59 @@ def agreement(df: pd.DataFrame, session=None) -> dict:
     caught = matrix["both_flag"] + matrix["human_only"]
     return {"n": len(d), **matrix, "eval_recall_on_human_flags": round(matrix["both_flag"] / caught, 3) if caught
             else None, "per_evaluator_recall": per}
+
+
+def save_judge_feedback(trace_id: str, role: str, reviewer: str | None, agree: bool,
+                        disputed: list[str] | None = None, note: str | None = None) -> int:
+    """Store a chat user's agree/disagree on the eval verdicts for one answer; returns the row id."""
+    with SessionLocal() as s:
+        fb = JudgeFeedback(trace_id=trace_id, role=role, reviewer=reviewer, agree=agree,
+                           disputed=[] if agree else list(disputed or []), note=(note or "").strip() or None)
+        s.add(fb)
+        s.commit()
+        return fb.id
+
+
+def judge_feedback_summary(since=None, session=None) -> dict:
+    """Chat users' agree/disagree on eval verdicts: agreement rate, which checks get disputed (split by what the
+    check said: disputing a pass means too lenient, disputing a fail too strict) and the latest disagreements."""
+    own = session is None
+    session = session or SessionLocal()
+    try:
+        q = select(JudgeFeedback.id, JudgeFeedback.created_at, JudgeFeedback.trace_id, JudgeFeedback.role,
+                   JudgeFeedback.agree, JudgeFeedback.disputed, JudgeFeedback.note, Trace.question) \
+            .join(Trace, Trace.id == JudgeFeedback.trace_id)
+        if since is not None:
+            q = q.where(JudgeFeedback.created_at >= since)
+        fb = pd.DataFrame(session.execute(q).all())
+        ev = pd.DataFrame()
+        if not fb.empty:
+            ev = pd.DataFrame(session.execute(
+                select(EvalResult.trace_id, EvalResult.evaluator, EvalResult.passed, EvalResult.created_at)
+                .where(EvalResult.trace_id.in_(fb.trace_id.tolist()))).all())
+    finally:
+        if own:
+            session.close()
+    disputed = pd.DataFrame(columns=["evaluator", "said_pass", "said_fail", "total"])
+    if fb.empty:
+        return {"n": 0, "agree_rate": None, "n_disagree": 0, "disputed": disputed, "recent": fb}
+    rows = fb[~fb.agree].explode("disputed").dropna(subset=["disputed"])
+    if not rows.empty:
+        if not ev.empty:
+            latest = ev.sort_values("created_at").drop_duplicates(["trace_id", "evaluator"], keep="last")
+            rows = rows.merge(latest[["trace_id", "evaluator", "passed"]], how="left",
+                              left_on=["trace_id", "disputed"], right_on=["trace_id", "evaluator"])
+        else:
+            rows["passed"] = None
+        disputed = (rows.assign(said_pass=rows.passed == True, said_fail=rows.passed == False)  # noqa: E712
+                    .groupby("disputed").agg(said_pass=("said_pass", "sum"), said_fail=("said_fail", "sum"),
+                                             total=("said_pass", "size")).astype(int)
+                    .reset_index().rename(columns={"disputed": "evaluator"})
+                    .sort_values(["total", "evaluator"], ascending=[False, True], ignore_index=True))
+    recent = fb[~fb.agree].sort_values("created_at", ascending=False)[
+        ["created_at", "role", "question", "disputed", "note"]].head(20)
+    return {"n": len(fb), "agree_rate": float(fb.agree.mean()), "n_disagree": int((~fb.agree).sum()),
+            "disputed": disputed, "recent": recent}
 
 
 def _guess_shape(trace: Trace, judgment: HumanJudgment) -> tuple[str, str, dict]:

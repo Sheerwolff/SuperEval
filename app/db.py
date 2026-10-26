@@ -115,6 +115,22 @@ class HumanJudgment(Base):
     promoted_to: Mapped[str | None] = mapped_column(String(16))  # golden item id
 
 
+class JudgeFeedback(Base):
+    """A chat user agreeing or disagreeing with the eval verdicts shown on an answer (Chat page).
+    Unlike HumanJudgment, this rates the evaluators, not the answer."""
+
+    __tablename__ = "judge_feedback"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+    trace_id: Mapped[str] = mapped_column(ForeignKey("traces.id", ondelete="CASCADE"), index=True)
+    role: Mapped[str] = mapped_column(String(8))  # visitor | owner
+    reviewer: Mapped[str | None] = mapped_column(String(64))  # session id, for de-duplication
+    agree: Mapped[bool] = mapped_column(Boolean)
+    disputed: Mapped[list] = mapped_column(JSON, default=list)  # evaluator names the user disagrees with
+    note: Mapped[str | None] = mapped_column(Text)
+
+
 class GoldenItem(Base):
     """One benchmark question. Drafts become CI-gating only once a human approves them
     (golden-set review queue); items can also be promoted from human-judged traces."""
