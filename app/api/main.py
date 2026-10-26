@@ -204,7 +204,8 @@ def bench_run(body: BenchIn):
     def work():
         try:
             bench.run_bench(items, settings.prompt_version, live=True, max_cost=remaining, on_progress=progress,
-                            include_drafts=True, trigger="ui", user_key=body.user_key)
+                            include_drafts=True, trigger="ui", user_key=body.user_key,
+                            save_traces=True)
         except Exception as exc:  # report on the status endpoint instead of dying silently
             _bench["last_error"] = f"{type(exc).__name__}: {exc}"
         finally:

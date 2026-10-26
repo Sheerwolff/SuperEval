@@ -88,7 +88,10 @@ def test_chart_lint_decline_and_assumptions():
 
 
 def test_golden_references_and_scorers_selftest():
-    res = golden.selftest(golden.load(("approved", "draft")))
+    # drafts added from traces / chat feedback carry the agent's own SQL until the owner reviews them on the Review
+    # page, so only the generated set and approved items are expected to pass
+    items = [i for i in golden.load(("approved", "draft")) if i["status"] == "approved" or i["source"] == "drafted"]
+    res = golden.selftest(items)
     assert res["items"] >= 60 and not res["problems"], res["problems"][:3]
 
 

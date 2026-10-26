@@ -173,7 +173,7 @@ with human_tab:
                                 f"too strict {r['judge_too_strict']}× · n={r['n']}")
         items.append((name, val, sub, bool(r and r["kappa"] is not None and r["n"] >= 30 and r["kappa"] < 0.6)))
     tiles(items)
-    st.page_link("pages/10_Review.py", label="Judge traces on the Review page", icon="🧑‍⚖️")
+    st.page_link("pages/3_Review.py", label="Judge traces on the Review page", icon="🧑‍⚖️")
 
 # ---- chat feedback ------------------------------------------------------------------
 with feedback_tab:

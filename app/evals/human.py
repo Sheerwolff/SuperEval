@@ -1,5 +1,5 @@
 """The human layer: judgments on traces (Review page), the human override rate, agreement between
-humans and the automated evals, and promoting judged traces into the golden-set review queue."""
+humans and the automated evals, and the golden set: adding traces to it and curating it from owner judgments."""
 from __future__ import annotations
 
 import re
@@ -8,7 +8,7 @@ import pandas as pd
 from sqlalchemy import func, select
 
 from app.agent.textutil import detect_language
-from app.db import EvalResult, GoldenItem, HumanJudgment, JudgeFeedback, SessionLocal, Trace
+from app.db import EvalResult, GoldenItem, HumanJudgment, JudgeFeedback, SessionLocal, Trace, utcnow
 
 FAILURE_TAGS = ["wrong number", "ungrounded number", "bad method", "ignored ambiguity", "should have declined",
                 "declined wrongly", "misleading chart", "wrong language", "other"]
@@ -22,7 +22,9 @@ def judgments_frame(role: str | None = None, session=None) -> pd.DataFrame:
     try:
         q = select(HumanJudgment.id, HumanJudgment.created_at, HumanJudgment.trace_id, HumanJudgment.role,
                    HumanJudgment.correct, HumanJudgment.method_ok, HumanJudgment.tags,
-                   HumanJudgment.corrected_answer)
+                   HumanJudgment.corrected_answer) \
+            .join(Trace, Trace.id == HumanJudgment.trace_id) \
+            .where(Trace.source != "golden")  # reviewing golden-set test answers curates the set, not traffic
         if role:
             q = q.where(HumanJudgment.role == role)
         df = pd.DataFrame(session.execute(q).all())
@@ -142,7 +144,7 @@ def judge_feedback_summary(since=None, session=None) -> dict:
 
 
 def _guess_shape(trace: Trace, tags=(), corrected_sql: str | None = None) -> tuple[str, str, dict]:
-    """(qtype, answer_type, answer_key) draft for a trace going into the golden set; the owner fixes it in the queue."""
+    """(qtype, answer_type, answer_key) draft for a trace going into the golden set; the owner fixes it on Review."""
     if "should have declined" in tags:
         return "trap_unanswerable", "decline", {}
     if "ignored ambiguity" in tags:
@@ -201,3 +203,48 @@ def promote(judgment_id: int) -> str:
         j.promoted_to = gid
         s.commit()
         return gid
+
+
+def golden_for_trace(trace_id: str, session=None) -> tuple[str | None, bool | None]:
+    """(golden item id, whether the scorer matched the answer to the reference) for a golden-set test answer."""
+    own = session is None
+    s = session or SessionLocal()
+    try:
+        e = s.execute(select(EvalResult).where(EvalResult.trace_id == trace_id,
+                                               EvalResult.evaluator == "golden_match")).scalars().first()
+        return (e.details.get("golden_id"), e.passed) if e else (None, None)
+    finally:
+        if own:
+            s.close()
+
+
+def curate_golden(trace_id: str, correct: str, corrected_sql: str | None = None, bad_question: bool = False) -> str:
+    """Apply an owner's judgment of a golden-set test answer to its golden item; returns what happened.
+
+    The scorer already compared the answer with the reference, so the owner's verdict tells us about the reference:
+    agreeing with the scorer confirms it (approve), disagreeing means the reference is suspect (draft, unless the
+    owner supplies corrected SQL, which becomes the new reference). A bad question is rejected."""
+    with SessionLocal() as s:
+        gid, matched = golden_for_trace(trace_id, session=s)
+        g = s.get(GoldenItem, gid) if gid else None
+        if g is None:
+            return "not a golden-set answer"
+        sql = (corrected_sql or "").strip()
+        if bad_question:
+            g.status, msg = "rejected", f"{gid} rejected"
+        elif sql:
+            g.reference_sql, g.status, msg = sql, "approved", f"{gid} approved with your SQL as the reference"
+        elif correct == "unsure" or matched is None:
+            return f"{gid} unchanged"
+        elif (correct == "yes") == bool(matched):
+            g.status, msg = "approved", f"{gid} approved: you agree with its reference"
+        else:
+            g.status = "draft"
+            said = "correct" if correct == "yes" else "wrong"
+            g.notes = ((g.notes or "") + f" Reference disputed: the owner judged the answer {said}, the scorer "
+                       "disagreed. Add correct SQL to fix it.").strip()
+            msg = f"{gid} kept as a draft: your verdict disagrees with its reference"
+        g.reviewed_by = "owner"
+        g.updated_at = utcnow()
+        s.commit()
+        return msg

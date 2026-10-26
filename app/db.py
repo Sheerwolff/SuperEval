@@ -143,7 +143,7 @@ class UserSpend(Base):
 
 class GoldenItem(Base):
     """One benchmark question. Drafts become CI-gating only once a human approves them
-    (golden-set review queue); items can also be promoted from human-judged traces."""
+    (curated by owner judgments of its test answers on the Review page); items can also come from traces."""
 
     __tablename__ = "golden_items"
 

@@ -28,7 +28,9 @@ RUNS = ROOT / "data" / "reference" / "bench_runs.jsonl"
 GATES = {"overall": 0.80, "trap_unanswerable": 0.80, "trap_ambiguous": 0.75}
 
 
-def run_one(item: dict, version: str, live: bool, model: str | None) -> dict:
+def run_one(item: dict, version: str, live: bool, model: str | None, run_id: str | None = None) -> dict:
+    """Answer and score one golden item. With `run_id`, the answer is also stored as a trace (source 'golden')
+    with a `golden_match` verdict, so it can be reviewed on the Review page."""
     sem = get_semantic()
     if live:
         from app.analyst.agent import run_analyst
@@ -39,11 +41,28 @@ def run_one(item: dict, version: str, live: bool, model: str | None) -> dict:
 
         res = run_sim(item["question"], version)
     s = scoring.score(item, res.answer, res.queries, sem)
+    if run_id:
+        save_trace(res, item, s, run_id)
     return {"id": item["id"], "qtype": item["qtype"], "difficulty": item["difficulty"], "language": item["language"],
             "answer_type": item["answer_type"], "passed": s.passed, "score": s.score, "details": s.details,
             "completed": res.completed, "error": res.error, "cost_usd": res.cost_usd if live else 0.0,
             "latency_ms": res.latency_ms, "steps": res.steps, "question": item["question"],
             "headline": (res.answer or {}).get("headline"), "trace_id": res.id}
+
+
+def save_trace(res, item: dict, s, run_id: str) -> None:
+    from app.analyst.pipeline import to_trace
+    from app.data.catalog import get_catalog
+    from app.db import EvalResult, SessionLocal
+
+    trace = to_trace(res, "golden", f"golden:{run_id}", snapshot_date=get_catalog().snapshot_date,
+                     topic=item["qtype"])
+    with SessionLocal() as db:
+        db.add(trace)
+        db.flush()
+        db.add(EvalResult(trace_id=trace.id, evaluator="golden_match", kind="deterministic", score=s.score,
+                          passed=s.passed, details={**(s.details or {}), "golden_id": item["id"]}))
+        db.commit()
 
 
 def summarize(rows: list[dict]) -> dict:
@@ -82,12 +101,15 @@ def gate_failures(summary: dict) -> list[str]:
 
 def run_bench(items: list[dict], version: str, live: bool, model: str | None = None, max_cost: float | None = None,
               workers: int = 4, on_progress=None, record: bool = True, include_drafts: bool = False,
-              trigger: str = "cli", user_key: str | None = None) -> dict:
+              trigger: str = "cli", user_key: str | None = None, save_traces: bool = False) -> dict:
     """Run golden items through the analyst and score them. `on_progress(row)` fires per question; the run stops
-    once spend passes `max_cost`. Appends the run to RUNS when `record` and returns it."""
+    once spend passes `max_cost`. With `save_traces`, every answer is stored as a reviewable 'golden' trace.
+    Appends the run to RUNS when `record` and returns it."""
     rows, spent = [], 0.0
+    at = datetime.now(UTC).isoformat(timespec="seconds")
+    run_id = at if save_traces else None
     with ThreadPoolExecutor(workers if live else 1) as pool:
-        for r in pool.map(lambda it: run_one(it, version, live, model), items):
+        for r in pool.map(lambda it: run_one(it, version, live, model, run_id), items):
             rows.append(r)
             spent += r["cost_usd"]
             if on_progress:
@@ -97,7 +119,7 @@ def run_bench(items: list[dict], version: str, live: bool, model: str | None = N
                 pool.shutdown(wait=False, cancel_futures=True)
                 break
     summary = summarize(rows)
-    rec = {"at": datetime.now(UTC).isoformat(timespec="seconds"), "version": version,
+    rec = {"at": at, "version": version,
            "model": model or (settings.agent_model if live else "sim"), "live": live,
            "reviewed_only": not include_drafts, "include_drafts": include_drafts, "trigger": trigger,
            "user_key": user_key, "summary": summary, "gate_failures": gate_failures(summary), "rows": rows}
@@ -160,7 +182,7 @@ def main() -> None:
         print(json.dumps(res, ensure_ascii=False, indent=2))
         sys.exit(1 if res["problems"] else 0)
     if not items:
-        print("no golden items (approve some in the review queue, or pass --include-drafts)", file=sys.stderr)
+        print("no approved golden items (approve some on the Review page, or pass --include-drafts)", file=sys.stderr)
         sys.exit(2)
     spent = [0.0]
 

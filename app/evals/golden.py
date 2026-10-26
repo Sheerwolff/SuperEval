@@ -1,8 +1,8 @@
 """The analyst benchmark ("golden set"): fixed questions + reference SQL, human-reviewed.
 
-    python -m app.evals.golden build      # draft the 80 questions into the DB review queue
+    python -m app.evals.golden build      # draft the 80 questions into the DB
     python -m app.evals.golden export     # write approved (or --all) items to golden_analysis.jsonl (CI reads it)
-    python -m app.evals.golden import     # load golden_analysis.jsonl into the DB review queue
+    python -m app.evals.golden import     # load golden_analysis.jsonl into the DB
     python -m app.evals.golden selftest   # every reference runs, and scorers pass a perfect answer / fail a wrong one
 
 Drafts are built only from the committed sample's cities (Tel Aviv, Haifa, Jerusalem), so CI can
@@ -305,7 +305,7 @@ def main() -> None:
     args = ap.parse_args()
     if args.cmd == "build":
         items = build_drafts()
-        print(f"drafted {len(items)}; new in review queue: {save_drafts(items)}")
+        print(f"drafted {len(items)}; new drafts: {save_drafts(items)}")
     elif args.cmd == "export":
         print(f"exported {export(args.all)} items to {FILE}")
     elif args.cmd == "import":

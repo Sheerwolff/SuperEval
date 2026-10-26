@@ -69,7 +69,7 @@ def setup(title: str, icon: str = "📊") -> None:
 
 
 PAGES = ["", "Chat", "Price_Explorer", "Agent_Evals", "Trace_Explorer", "Judge_Monitor", "Architecture",
-         "Golden_Set", "Review"]
+         "Review"]
 THEMES = {"☀️ Light": "Light", "🌙 Dark": "Dark", "💻 Auto": "System"}
 
 
@@ -114,8 +114,8 @@ def user_key() -> str:
     reports no IP for localhost connections, so those share one 'localhost' key. Sent to the API, which only ever
     sees this server."""
     headers = st.context.headers or {}
-    ip = (headers.get("X-Forwarded-For") or "").split(",")[0].strip() or st.context.ip_address or "localhost"
-    return hashlib.sha256(ip.encode()).hexdigest()[:32]
+    ip = str(headers.get("X-Forwarded-For") or "").split(",")[0].strip() or st.context.ip_address or "localhost"
+    return hashlib.sha256(str(ip).encode()).hexdigest()[:32]
 
 
 # ---- API ---------------------------------------------------------------

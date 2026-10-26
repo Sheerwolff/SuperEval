@@ -2,8 +2,18 @@ import pandas as pd
 import streamlit as st
 from sqlalchemy import select
 
-from app.db import EvalResult, HumanJudgment, SessionLocal, Trace
-from app.evals.human import FAILURE_TAGS, agreement, judgments_frame, override_rate, promote
+from app.analyst.semantic import get_semantic
+from app.db import EvalResult, GoldenItem, HumanJudgment, SessionLocal, Trace
+from app.evals import golden
+from app.evals.human import (
+    FAILURE_TAGS,
+    agreement,
+    curate_golden,
+    golden_for_trace,
+    judgments_frame,
+    override_rate,
+    promote,
+)
 from components import owner_unlock, role
 from lib import eval_badges, setup, tiles
 from render import render_chart, render_queries
@@ -11,11 +21,14 @@ from render import render_chart, render_queries
 setup("Review", "🧑‍⚖️")
 st.markdown("## 🧑‍⚖️ Review traces")
 st.caption("Read what the analyst did and judge it yourself. Judgments are stored with your role. Owner judgments "
-           "calibrate the LLM judge and can be promoted into the golden set; visitor judgments are tracked "
+           "calibrate the LLM judge and can add answers to the golden set; visitor judgments are tracked "
            "separately. Together they measure the **human override rate**, and whether the automated evals catch "
-           "what people catch.")
+           "what people catch. Pick source **golden** to review golden-set test answers: an owner's judgment there "
+           "approves, fixes or rejects the golden question.")
 owner_unlock()
 me = role()
+if toast := st.session_state.pop("review_toast", None):
+    st.toast(toast)
 if "session_id" not in st.session_state:
     import uuid
 
@@ -54,7 +67,7 @@ st.divider()
 f1, f2, f3 = st.columns(3)
 only_unreviewed = f1.toggle("Unreviewed only", value=True)
 only_flagged = f2.toggle("Failed an automated check", value=False)
-source = f3.selectbox("Source", ["user", "any", "synthetic", "backfill", "offline"])
+source = f3.selectbox("Source", ["user", "golden", "any", "synthetic", "backfill", "offline"])
 with SessionLocal() as s:
     q = select(Trace).where(Trace.analysis.is_not(None) | Trace.error.is_not(None)).order_by(
         Trace.created_at.desc()).limit(300)
@@ -84,6 +97,10 @@ with SessionLocal() as s:
                       .order_by(HumanJudgment.created_at.desc())).scalars().all()
     prior = [{"id": j.id, "role": j.role, "correct": j.correct, "method_ok": j.method_ok, "tags": j.tags,
               "corrected_answer": j.corrected_answer, "note": j.note, "promoted_to": j.promoted_to} for j in prior]
+    gid, matched = golden_for_trace(tid, session=s)
+    gitem = s.get(GoldenItem, gid) if gid else None
+    gold = golden.as_dict(gitem) if gitem else None
+    in_golden = s.execute(select(GoldenItem.id).where(GoldenItem.source_trace_id == tid)).scalar()
 
 st.divider()
 a, b = st.columns([3, 2], gap="large")
@@ -106,6 +123,29 @@ with b:
                        + (f", corrected: {j['corrected_answer']}" if j["corrected_answer"] else "")
                        + (f" · promoted to {j['promoted_to']}" if j["promoted_to"] else ""))
 
+if gold:
+    with st.container(border=True):
+        st.markdown(f"**🏅 Golden question {gold['id']}** · status **{gold['status']}** · {gold['qtype']} · "
+                    f"answer type {gold['answer_type']} · scorer: "
+                    + ("✓ matches the reference" if matched else "✗ doesn't match the reference"))
+        if gold.get("notes"):
+            st.caption(gold["notes"])
+        if gold.get("reference_sql"):
+            st.code(gold["reference_sql"], language="sql")
+            ref = get_semantic().run(gold["reference_sql"], "ref")
+            if ref.error:
+                st.error(ref.error)
+            else:
+                st.caption(f"Today's reference result · {ref.row_count} rows")
+                st.dataframe(pd.DataFrame(ref.rows[:10], columns=ref.columns), hide_index=True,
+                             use_container_width=True)
+        else:
+            st.caption("No reference SQL: this question is scored on whether the agent declines or states an "
+                       "assumption.")
+        if me == "owner":
+            st.caption("Your judgment below curates this question: agreeing with the scorer approves it, correct "
+                       "SQL replaces its reference, and 'bad question' rejects it.")
+
 st.markdown(f"#### Your judgment · as **{me}**")
 with st.form(f"judge_{tid}"):
     c1, c2 = st.columns(2)
@@ -114,8 +154,10 @@ with st.form(f"judge_{tid}"):
                       help="Compared like with like, sensible filters, honest caveats.")
     tags = st.multiselect("What went wrong (if anything)", FAILURE_TAGS)
     corrected = st.text_input("Correct answer, if you know it")
-    corrected_sql = st.text_area("Correct SQL (optional, becomes the golden reference)", height=80) \
+    corrected_sql = st.text_area("Correct reference SQL (optional, replaces the golden reference)" if gold else
+                                 "Correct SQL (optional, becomes the golden reference)", height=80) \
         if me == "owner" else None
+    bad_question = st.checkbox("This golden question is bad: reject it") if gold and me == "owner" else False
     note = st.text_input("Note")
     if st.form_submit_button("Save judgment", type="primary"):
         with SessionLocal() as s:
@@ -124,11 +166,15 @@ with st.form(f"judge_{tid}"):
                                 corrected_answer=corrected or None, corrected_sql=corrected_sql or None,
                                 note=note or None))
             s.commit()
-        st.toast("Saved. Thanks!")
+        msg = "Saved. Thanks!"
+        if gold and me == "owner":
+            msg += " " + curate_golden(tid, correct, corrected_sql, bad_question) + "."
+        st.session_state.review_toast = msg
         st.rerun()
 
 owner_prior = [j for j in prior if j["role"] == "owner" and not j["promoted_to"]]
-if me == "owner" and owner_prior:
-    if st.button("🏅 Promote to the golden set (draft for review)"):
-        gid = promote(owner_prior[0]["id"])
-        st.success(f"Created {gid} in the golden-set review queue. Approve it there to make it gate CI.")
+if me == "owner" and owner_prior and not gold and not in_golden:
+    if st.button("🏅 Add to the golden set"):
+        new = promote(owner_prior[0]["id"])
+        st.success(f"Added as draft {new}. It's tested in the next golden-set run on Agent Evals; review that "
+                   "answer here (source: golden) to approve it.")

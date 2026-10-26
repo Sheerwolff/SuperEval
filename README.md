@@ -70,13 +70,15 @@ Secondary metrics are sliced by question type and language:
 1. **Ask the analyst.** Every query streams live. The answer comes with a chart, the SQL behind each number, and its
    eval scorecard.
 2. **Test the agent.** *Agent evals* runs the live agent on the golden set (about 4 minutes, ~$0.20) and shows
-   accuracy, accuracy by question type and every wrong answer, next to the Layer 1 metrics on live traffic. The
-   golden set grows from the *Golden set* queue, the *Trace explorer*'s "Add to golden set", and every
-   disagreement with the verdicts in *Chat*.
+   accuracy, accuracy by question type and every wrong answer, next to the Layer 1 metrics on live traffic. Every
+   answer from the run is saved as a trace (source *golden*). The golden set grows from the *Trace explorer*'s
+   "Add to golden set", owner judgments on *Review*, and every disagreement with the verdicts in *Chat*.
 3. **Investigate.** *Trace explorer* filters to a failing check, showing the SQL, the result, and why the lint flagged it.
 4. **Who watches the judge?** *Judge monitor* shows the seeded lenient-judge incident, the canaries and κ.
-5. **Review.** Anyone can judge a trace on the *Review* page. Judgments are stored by role (visitor/owner), owner
-   judgments can be promoted into the golden-set review queue, and the owner approves items on *Golden set*.
+5. **Review.** Anyone can judge a trace on the *Review* page. Judgments are stored by role (visitor/owner), and
+   owner judgments can add an answer to the golden set. With source *golden*, the owner reviews golden-set test
+   answers: agreeing with the scorer approves the question, correct SQL replaces its reference, and "bad question"
+   rejects it.
 
 ## Layer 2: evaluating the judge
 
@@ -169,7 +171,7 @@ Jerusalem) is committed for tests and CI, and the golden set is built from it so
 | `app/traffic/` | Synthetic questions; 30-day backfill with six seeded incidents |
 | `app/api/` | FastAPI service (SSE chat stream, background golden-set runs, simulated bursts) and per-user cost guard |
 | `app/data/` | XML parsing, city normalization, ingest, LLM enrichment, snapshot fetch/sample |
-| `ui/` | Streamlit: chat, price explorer, agent evals, traces, judge monitor, golden set, review, architecture |
+| `ui/` | Streamlit: chat, price explorer, agent evals, traces, judge monitor, review, architecture |
 
 ## Run it locally
 
@@ -178,7 +180,7 @@ python -m venv .venv && . .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements-dev.txt
 cp .env.example .env                            # OPENAI_API_KEY (optional), ADMIN_KEY for the owner role
 python -m app.traffic.backfill --days 30 --reset
-python -m app.evals.golden import               # load the golden set into the review queue
+python -m app.evals.golden import               # load the golden set into the DB
 uvicorn app.api.main:app --port 8000 &
 python -m streamlit run ui/Home.py
 ```

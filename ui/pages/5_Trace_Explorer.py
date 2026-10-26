@@ -20,7 +20,7 @@ preset = st.session_state.pop("trace_filter_failing", None)
 f1, f2, f3 = st.columns(3)
 failing = f1.selectbox("Failing check", FAILING, index=FAILING.index(preset) if preset in FAILING else 0)
 topic = f2.selectbox("Question type", TOPICS)
-source = f3.selectbox("Source", ["any", "user", "synthetic", "backfill"])
+source = f3.selectbox("Source", ["any", "user", "golden", "synthetic", "backfill"])
 
 with SessionLocal() as s:
     q = select(Trace).order_by(Trace.created_at.desc()).limit(300)

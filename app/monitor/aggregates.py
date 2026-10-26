@@ -47,7 +47,7 @@ def load_traces(since: datetime | None = None, until: datetime | None = None, se
     q = select(
         Trace.id, Trace.created_at, Trace.source, Trace.agent_version, Trace.model, Trace.language,
         Trace.topic, Trace.latency_ms, Trace.cost_usd, Trace.input_tokens, Trace.output_tokens, Trace.error,
-    )
+    ).where(Trace.source != "golden")  # golden-set test answers aren't production traffic
     if since is not None:
         q = q.where(Trace.created_at >= since)
     if until is not None:
@@ -70,7 +70,7 @@ def load_evals(since: datetime | None = None, until: datetime | None = None, ses
     q = select(
         EvalResult.trace_id, EvalResult.created_at, EvalResult.evaluator, EvalResult.kind,
         EvalResult.score, EvalResult.passed, Trace.agent_version, Trace.language, Trace.topic, Trace.source,
-    ).join(Trace, Trace.id == EvalResult.trace_id)
+    ).join(Trace, Trace.id == EvalResult.trace_id).where(Trace.source != "golden")
     if since is not None:
         q = q.where(EvalResult.created_at >= since)
     if until is not None:

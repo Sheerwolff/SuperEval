@@ -122,7 +122,7 @@ with st.container(border=True):
               "feedback": "chat feedback"}
     st.caption("Golden set: " + " · ".join(f"{n} from {labels.get(src, src)}" for src, n in
                                           sorted(mix.items(), key=lambda kv: -kv[1])))
-    st.page_link("pages/9_Golden_Set.py", label="Review the golden set", icon="🏅")
+    st.page_link("pages/3_Review.py", label="Review golden-set answers (source: golden)", icon="🧑‍⚖️")
 
 # ---- layer 1 and alerts ------------------------------------------------------------------
 with SessionLocal() as s:
