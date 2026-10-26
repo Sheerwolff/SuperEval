@@ -131,6 +131,21 @@ class JudgeFeedback(Base):
     note: Mapped[str | None] = mapped_column(Text)
 
 
+class JudgeCalibration(Base):
+    """One 'Calibrate' run on the Judge Validation page: the evidence set the live judge is fed from now on (approved
+    golden questions), and the owner-annotated gold set re-judged without and with that evidence."""
+
+    __tablename__ = "judge_calibrations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+    judge_model: Mapped[str] = mapped_column(String(64))
+    evidence: Mapped[list] = mapped_column(JSON, default=list)  # [{id, question, reference_sql, answer_type}]
+    summary: Mapped[dict] = mapped_column(JSON, default=dict)  # {"without": metrics, "with": metrics}
+    rows: Mapped[list] = mapped_column(JSON, default=list)  # per gold item: human label + both verdicts
+    cost_usd: Mapped[float] = mapped_column(Float, default=0.0)
+
+
 class UserSpend(Base):
     """Live LLM spend per user per day (chat + golden-set runs), for the $1/user/day cap."""
 

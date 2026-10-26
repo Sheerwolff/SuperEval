@@ -75,7 +75,9 @@ Secondary metrics are sliced by question type and language:
    golden set" and owner judgments) and from every disagreement with the verdicts in *Chat*.
 3. **Investigate.** *Review* filters to a failing check or question type, showing the SQL, the result, and why the
    lint flagged it.
-4. **Who watches the judge?** *Judge monitor* shows the seeded lenient-judge incident, the canaries and κ.
+4. **Who watches the judge?** *Judge validation* compares the judge with the owner-annotated gold set (confusion
+   matrix, recall first), shows how ground-truth evidence changes its verdicts, and lists the failures humans caught
+   that the suite missed. The owner's **Calibrate** updates the evidence the judge is fed and re-runs the comparison.
 5. **Review.** Anyone can judge a trace on the *Review* page. Judgments are stored by role (visitor/owner), and
    owner judgments can add an answer to the golden set. With source *golden*, the owner reviews golden-set test
    answers: agreeing with the scorer approves the question, correct SQL replaces its reference, and "bad question"
@@ -167,12 +169,12 @@ Jerusalem) is committed for tests and CI, and the golden set is built from it so
 | Path | What |
 |---|---|
 | `app/analyst/` | Semantic layer (DuckDB, canonical macros), OpenAI analyst, structured answer, simulator with fault knobs, question-type classifier |
-| `app/evals/` | Online Layer 1 evals, SQL lint, gpt-5 judge, judge monitor (Layer 2), canaries, calibration, human judgments, golden set, scorers, benchmark |
+| `app/evals/` | Online Layer 1 evals, SQL lint, gpt-5 judge, ground-truth evidence, judge validation, judge monitor (Layer 2), canaries, calibration, human judgments, golden set, scorers, benchmark |
 | `app/monitor/` | Aggregates, rules (Wilson SLOs, z-score, PSI, freshness, budget, judge rules), alert lifecycle |
 | `app/traffic/` | Synthetic questions; 30-day backfill with six seeded incidents |
 | `app/api/` | FastAPI service (SSE chat stream, background golden-set runs, simulated bursts) and per-user cost guard |
 | `app/data/` | XML parsing, city normalization, ingest, LLM enrichment, snapshot fetch/sample |
-| `ui/` | Streamlit: chat, price explorer, agent evals, traces, judge monitor, review, architecture |
+| `ui/` | Streamlit: chat, price explorer, review, agent evals, judge validation, architecture |
 
 ## Run it locally
 

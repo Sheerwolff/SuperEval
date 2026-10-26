@@ -44,6 +44,17 @@ The agent's documented metric definitions:
 """ + SCHEMA_DOC[SCHEMA_DOC.index("Canonical metrics"):]
 RUBRIC_HASH = hashlib.sha256(RUBRIC.encode()).hexdigest()[:10]
 
+EVIDENCE_RUBRIC = """
+
+GROUND-TRUTH EVIDENCE: the input may also contain `evidence`: records retrieved from the same database independently
+of the agent (a human-reviewed reference query for this question, or the canonical metric for this kind of question),
+or an `expected` behaviour. Treat it as the truth:
+- if the answer's headline or numbers contradict the evidence, set grounded=false and answers_question <= 2;
+- if the evidence shows the agent compared different products, or used the wrong city or category, method_validity <= 2;
+- if the evidence says the question should be declined (or needs a stated assumption) and the answer doesn't,
+  answers_question <= 2.
+If the evidence doesn't cover what the question asks, ignore it."""
+
 
 class AnalystVerdict(BaseModel):
     reasoning: str = Field(description="Max three sentences")
@@ -54,15 +65,21 @@ class AnalystVerdict(BaseModel):
     grounded: bool
 
 
-def _payload(question: str, queries: list[dict], analysis: dict, limit: int = 9000) -> str:
+def _payload(question: str, queries: list[dict], analysis: dict, evidence: dict | None = None,
+             limit: int = 9000) -> str:
     qs = [{"id": q["id"], "sql": q["sql"], "error": q.get("error"), "columns": q.get("columns"),
            "rows": (q.get("rows") or [])[:15], "row_count": q.get("row_count")} for q in queries]
-    s = json.dumps({"question": question, "queries": qs, "answer": analysis}, ensure_ascii=False, default=str)
+    body = {"question": question, "queries": qs, "answer": analysis}
+    if evidence:
+        body["evidence"] = evidence
+    s = json.dumps(body, ensure_ascii=False, default=str)
     return s if len(s) <= limit else s[:limit] + "…(truncated)"
 
 
-def judge_live(question: str, queries: list[dict], analysis: dict,
-               model: str | None = None) -> tuple[AnalystVerdict, dict]:
+def judge_live(question: str, queries: list[dict], analysis: dict, model: str | None = None,
+               evidence: dict | None = None) -> tuple[AnalystVerdict, dict]:
+    """`evidence` (app/evals/evidence.py) adds ground-truth records and the evidence rubric; without it this is the
+    plain rubric, which is what the Judge Validation ablation compares against."""
     from openai import OpenAI
 
     model = model or settings.judge_model
@@ -71,11 +88,12 @@ def judge_live(question: str, queries: list[dict], analysis: dict,
     start = time.perf_counter()
     resp = client.chat.completions.parse(
         model=model, response_format=AnalystVerdict,
-        messages=[{"role": "system", "content": RUBRIC}, {"role": "user", "content": _payload(question, queries,
-                                                                                               analysis)}],
+        messages=[{"role": "system", "content": RUBRIC + (EVIDENCE_RUBRIC if evidence else "")},
+                  {"role": "user", "content": _payload(question, queries, analysis, evidence)}],
         **extra)
     u = resp.usage
-    meta = {"judge_model": model, "rubric_hash": RUBRIC_HASH, "latency_ms": round((time.perf_counter() - start) * 1000),
+    meta = {"judge_model": model, "rubric_hash": RUBRIC_HASH + ("+ev" if evidence else ""),
+            "evidence": (evidence or {}).get("source"), "latency_ms": round((time.perf_counter() - start) * 1000),
             "input_tokens": u.prompt_tokens if u else 0, "output_tokens": u.completion_tokens if u else 0}
     meta["cost_usd"] = cost_usd(model, meta["input_tokens"], meta["output_tokens"])
     return resp.choices[0].message.parsed, meta
@@ -134,12 +152,23 @@ def outcomes(v: AnalystVerdict, meta: dict) -> list[EvalOutcome]:
     ]
 
 
+def _evidence(question: str) -> dict | None:
+    """The live judge always gets ground-truth evidence when it can be retrieved; a retrieval error never blocks it."""
+    try:
+        from app.evals.evidence import retrieve
+
+        return retrieve(question)
+    except Exception:
+        return None
+
+
 def run_judge(trace, deterministic: list[EvalOutcome], force_sim: bool = False, leniency: float = 0.0,
               judge_model: str = "sim-judge") -> list[EvalOutcome]:
     use_live = settings.live_llm and not force_sim and trace.model != "sim"
     try:
         if use_live:
-            v, meta = judge_live(trace.question, trace.tool_calls or [], trace.analysis or {})
+            v, meta = judge_live(trace.question, trace.tool_calls or [], trace.analysis or {},
+                                 evidence=_evidence(trace.question))
         else:
             v, meta = judge_sim(trace.id, deterministic, leniency, judge_model)
     except Exception as exc:

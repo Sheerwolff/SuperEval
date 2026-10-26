@@ -12,7 +12,7 @@ import time
 from contextlib import asynccontextmanager
 from typing import Literal
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -220,6 +220,55 @@ def bench_run(body: BenchIn):
 def bench_status(user_key: str | None = None):
     spent = guard.spent_today(user_key) if user_key else None
     return {**_bench, "spent_today": spent, "budget": guard.budget, "live_llm": settings.live_llm}
+
+
+# ---- judge calibration (Judge Validation page, owner only) -----------------------------
+_cal_lock = threading.Lock()
+_cal: dict = {"running": False, "done": 0, "total": 0, "started_at": None, "last_error": None}
+
+
+@app.post("/judge/calibrate")
+def judge_calibrate(body: BenchIn, x_admin_key: str | None = Header(default=None)):
+    """Save a new evidence set for the live judge and re-judge the gold set without and with it, in the background.
+    Owner only (ADMIN_KEY); each judge call is charged to the owner's daily budget."""
+    import hmac
+
+    from app.evals import judge_validation
+
+    if not settings.admin_key or not hmac.compare_digest(x_admin_key or "", settings.admin_key):
+        raise HTTPException(403, "Only the owner can calibrate the judge.")
+    if not settings.live_llm:
+        raise HTTPException(400, "No API key configured, so the live judge can't run.")
+    remaining = guard.remaining(body.user_key)
+    if remaining <= 0:
+        raise HTTPException(429, f"You've used today's ${guard.budget:.2f} of live LLM calls.")
+    n = len(judge_validation.gold_set())
+    if not n:
+        raise HTTPException(400, "No owner-annotated answers yet: judge some on the Review page first.")
+    if not _cal_lock.acquire(blocking=False):
+        raise HTTPException(409, "A calibration is already running.")
+    _cal.update(running=True, done=0, total=2 * n, started_at=time.time(), last_error=None)
+
+    def progress(cost: float) -> None:
+        guard.charge(body.user_key, cost)
+        _cal["done"] += 1
+
+    def work():
+        try:
+            judge_validation.calibrate(on_progress=progress, max_cost=remaining)
+        except Exception as exc:
+            _cal["last_error"] = f"{type(exc).__name__}: {exc}"
+        finally:
+            _cal["running"] = False
+            _cal_lock.release()
+
+    threading.Thread(target=work, daemon=True).start()
+    return {"started": True, "gold": n}
+
+
+@app.get("/judge/calibrate/status")
+def judge_calibrate_status():
+    return _cal
 
 
 @app.get("/traces")

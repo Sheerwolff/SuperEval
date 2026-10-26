@@ -275,3 +275,30 @@ def approve_into_golden(judgment_id: int) -> str:
         g.updated_at = utcnow()
         s.commit()
         return msg
+
+
+def missed_failures(session=None) -> pd.DataFrame:
+    """Answers people judged wrong, unsound or corrected on Review where no automated check (Layer 1 or the judge)
+    failed: the failures the eval suite should have caught."""
+    df = judgments_frame(session=session)
+    bad = df[df.apply(is_override, axis=1)] if not df.empty else df
+    cols = ["when", "role", "question", "what went wrong", "trace_id"]
+    if bad.empty:
+        return pd.DataFrame(columns=cols)
+    own = session is None
+    s = session or SessionLocal()
+    try:
+        ids = bad.trace_id.tolist()
+        caught = {t for (t,) in s.execute(select(EvalResult.trace_id).where(EvalResult.trace_id.in_(ids),
+                                                                            EvalResult.passed.is_(False)))}
+        questions = dict(s.execute(select(Trace.id, Trace.question).where(Trace.id.in_(ids))).all())
+        notes = dict(s.execute(select(HumanJudgment.id, HumanJudgment.note)
+                               .where(HumanJudgment.id.in_(bad.id.tolist()))).all())
+    finally:
+        if own:
+            s.close()
+    miss = bad[~bad.trace_id.isin(caught)].sort_values("created_at", ascending=False)
+    return pd.DataFrame({"when": miss.created_at, "role": miss.role, "question": miss.trace_id.map(questions),
+                         "what went wrong": [notes.get(i) or ", ".join(t or []) or "—"
+                                             for i, t in zip(miss.id, miss.tags, strict=True)],
+                         "trace_id": miss.trace_id}, columns=cols)
