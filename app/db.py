@@ -229,6 +229,8 @@ def _engine():
     kwargs = {"pool_pre_ping": True}
     if url.startswith("sqlite"):
         kwargs["connect_args"] = {"check_same_thread": False}
+    else:  # fail fast on an unreachable server instead of waiting for the OS network timeout
+        kwargs["connect_args"] = {"connect_timeout": 10}
     return create_engine(url, **kwargs)
 
 

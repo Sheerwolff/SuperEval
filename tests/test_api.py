@@ -46,3 +46,29 @@ def test_bench_run_refusals(monkeypatch):
             with SessionLocal() as s:
                 s.query(UserSpend).filter(UserSpend.user_key == "test-broke").delete()
                 s.commit()
+
+
+def test_boot_retries_and_never_seeds_on_errors(monkeypatch):
+    from app import boot
+
+    calls, runs = [], []
+    monkeypatch.setattr(boot.time, "sleep", lambda s: None)
+    monkeypatch.setattr(boot.subprocess, "run", lambda cmd, check: runs.append(cmd))
+
+    def flaky():
+        calls.append(1)
+        if len(calls) < 3:
+            raise ConnectionError("SSL connection has been closed unexpectedly")
+        return 5, 80
+
+    monkeypatch.setattr(boot, "counts", flaky)
+    assert boot.main() == 0 and len(calls) == 3 and runs == []  # recovered, data present: nothing to seed
+
+    def down():
+        raise ConnectionError("unreachable")
+
+    monkeypatch.setattr(boot, "counts", down)
+    assert boot.main() == 1 and runs == []  # never seeds a database it couldn't read
+
+    monkeypatch.setattr(boot, "counts", lambda: (0, 0))
+    assert boot.main() == 0 and [c[2] for c in runs] == ["app.traffic.backfill", "app.evals.golden"]
