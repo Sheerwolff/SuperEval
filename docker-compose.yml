@@ -2,7 +2,7 @@ services:
   app:
     build: .
     ports:
-      - "7860:7860"
+      - "8080:8080"
     env_file:
       - path: .env
         required: false

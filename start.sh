@@ -2,12 +2,13 @@
 # One container, two processes: the API on an internal port, the dashboard on the public one.
 set -e
 export PYTHONPATH=/app
-PORT="${PORT:-7860}"
+PORT="${PORT:-8080}"
 
 # latest prices from the daily ingest (GitHub Release asset); falls back to the committed sample
 python -m app.data.fetch_snapshot || true
 
-# first boot on an empty database: seed 30 days of history so the dashboard isn't blank
+# first boot on an empty database: seed 30 days of history so the dashboard isn't blank. For a remote database,
+# seed it beforehand with scripts/seed_db.py: row-by-row seeding over the network can outlast the startup timeout
 python -c "from app.db import init_db, SessionLocal, Trace; init_db(); s=SessionLocal(); exit(0 if s.query(Trace).count() else 1)" \
   || python -m app.traffic.backfill --days 30
 

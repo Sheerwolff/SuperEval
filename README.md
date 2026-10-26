@@ -1,14 +1,3 @@
----
-title: SuperEval
-emoji: 🛒
-colorFrom: yellow
-colorTo: blue
-sdk: docker
-app_port: 7860
-pinned: false
-short_description: Two-layer eval monitoring for an LLM data-analyst agent
----
-
 # SuperEval
 
 *Production-grade evals for an AI agent answering questions about [Israeli supermarket prices](https://www.gov.il/he/pages/cpfta_prices_regulations).*
@@ -31,7 +20,7 @@ Every answer is evaluated in production in two layers:
 - **Layer 2, the judge:** is the judge still trustworthy? It's checked against ground-truth labels, daily canaries,
   self-consistency, owner judgments and bias checks.
 
-**▶ Live demo:** `https://huggingface.co/spaces/<you>/pricewatch-evals`.
+**▶ Live demo:** https://supereval-728288960508.europe-west1.run.app
 
 ---
 
@@ -198,16 +187,25 @@ python -m app.evals.canaries --run                         # Layer 2 canaries
 python scripts/alert_quality.py --seeds 1 2 3 4 5          # alert recall/precision across seeds
 ```
 
-## Deploy (free tier)
+## Deploy (Google Cloud Run + Neon, free tiers)
 
-1. **Database.** Create a [Neon](https://neon.tech) Postgres.
-2. **Space.** Create a Hugging Face Space with the *Docker* SDK.
-   - **Secrets:** `OPENAI_API_KEY`, `DATABASE_URL`, `SNAPSHOT_REPO`, `ADMIN_KEY` and `CONTACT_WHATSAPP`.
-   - **Optional:** `USER_DAILY_BUDGET_USD`, `DAILY_BUDGET_USD`, `AGENT_MODEL`, `JUDGE_MODEL` and `PROMPT_VERSION`.
-3. **GitHub.** Add the repo secrets `HF_TOKEN`, `DATABASE_URL` and `OPENAI_API_KEY`, and the variable `HF_SPACE`.
-   - **Pushes to `main`** deploy the Space.
+1. **Database.** Create a [Neon](https://neon.tech) Postgres, ideally in the same region as the app
+   (e.g. Frankfurt for `europe-west1`): every page makes several queries, so distance shows up as latency.
+2. **Seed it from your machine**, with its URL in `.env` as `DATABASE_URL`:
+   `python scripts/seed_db.py`. It seeds 30 days locally and bulk-copies them (~3 min). Seeding inside Cloud Run
+   instead goes row by row over the network and can run past the container's startup timeout.
+3. **Cloud Run.** Create a service that continuously deploys from this GitHub repo with Cloud Build (Dockerfile).
+   - **Settings:** 2 GiB memory, 1 CPU, min 0 / max 1 instances (in-memory run state lives in one instance),
+     request timeout 3600 s and session affinity (Streamlit keeps a websocket open), public access.
+   - **Secrets** (Secret Manager, referenced as variables): `DATABASE_URL`, `OPENAI_API_KEY`, `ADMIN_KEY`.
+   - **Optional:** `CONTACT_WHATSAPP`, `SNAPSHOT_REPO`, `USER_DAILY_BUDGET_USD`, `DAILY_BUDGET_USD`, `AGENT_MODEL`,
+     `JUDGE_MODEL`, `PROMPT_VERSION`.
+   - **Pushes to `main`** rebuild and redeploy. Add a billing budget alert.
+4. **GitHub.** Add the repo secrets `DATABASE_URL` and `OPENAI_API_KEY`.
    - **PRs** run the golden-set gate.
    - **Scheduled:** a daily job ingests prices, synthetic traffic runs every 30 minutes, and canaries run daily.
+
+Tests never touch `DATABASE_URL`: `tests/conftest.py` gives every run a throwaway SQLite database.
 
 Each user (by IP) can spend `USER_DAILY_BUDGET_USD` (default $1) of live LLM calls per UTC day, across chat and
 golden-set runs. Past it, chat switches to the simulator and says so, and golden-set runs are refused. There is no

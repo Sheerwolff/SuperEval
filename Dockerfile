@@ -10,6 +10,6 @@ COPY . .
 RUN chmod +x start.sh && useradd -m -u 1000 user && chown -R user /app
 USER user
 
-# Hugging Face Spaces routes traffic to 7860
-EXPOSE 7860
+# Cloud Run sends traffic to $PORT (8080 by default); start.sh listens there
+EXPOSE 8080
 CMD ["./start.sh"]

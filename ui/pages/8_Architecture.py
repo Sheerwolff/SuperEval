@@ -122,7 +122,7 @@ paid runs are refused. Calibrating is owner-only.
 
 ### Stack
 Python · FastAPI (SSE, background jobs) · OpenAI SDK (function calling, Structured Outputs) · DuckDB · SQLAlchemy
-(SQLite locally, Neon Postgres in production) · Streamlit + Plotly + Graphviz · GitHub Actions · Docker on Hugging
-Face Spaces.
+(SQLite locally, Neon Postgres in production) · Streamlit + Plotly + Graphviz · GitHub Actions · Docker on Google Cloud Run (built by Cloud Build on every
+push).
 """
 )
