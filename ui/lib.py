@@ -69,7 +69,7 @@ def setup(title: str, icon: str = "📊") -> None:
 
 
 PAGES = ["", "Chat", "Price_Explorer", "Agent_Evals", "Judge_Validation", "Architecture",
-         "Review"]
+         "Golden_Set"]
 THEMES = {"☀️ Light": "Light", "🌙 Dark": "Dark", "💻 Auto": "System"}
 
 

@@ -19,12 +19,10 @@ from components import owner_unlock, role
 from lib import eval_badges, setup, tiles
 from render import render_chart, render_queries
 
-setup("Review", "🧑‍⚖️")
-st.markdown("## 🧑‍⚖️ Review traces")
-st.caption("Pick an answer, then: ① read the question and answer, ② read the trace behind it, ③ judge it (what the "
-           "agent got wrong, and what a good answer looks like), ④ approve it into the golden set. Owner and visitor "
-           "judgments are kept apart; together they measure the **human override rate**. Pick source **golden** to "
-           "review golden-set test answers.")
+setup("Golden set", "🏅")
+st.markdown("## 🏅 Golden set")
+st.caption("Review and add items to the golden set. Read the question and answer → read the trace behind it "
+           "→ judge it → approve it into the golden set.")
 owner_unlock()
 me = role()
 if toast := st.session_state.pop("review_toast", None):
@@ -228,7 +226,7 @@ else:
     if not gold and approve.button("🏅 Save and suggest for the golden set", type="primary",
                                    use_container_width=True, key=f"suggest_{tid}"):
         if save_judgment():
-            new = draft_from_trace(tid, "trace", "Suggested on the Review page."
+            new = draft_from_trace(tid, "trace", "Suggested on the Golden set page."
                                    + (f" A good answer: {good.strip()}" if good.strip() else ""))
             st.session_state.review_toast = f"Judgment saved, and {new} suggested for the golden set. Thanks!"
             st.rerun()

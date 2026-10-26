@@ -1,4 +1,4 @@
-"""Judge vs. human agreement (Cohen's kappa), from owner judgments on the Review page.
+"""Judge vs. human agreement (Cohen's kappa), from owner judgments on the Golden set page.
 
   helpful  human "is the headline answer correct?" (yes/no)  vs. judge_helpfulness passed
   grounded human "was the method sound?" (yes/no)            vs. judge_method passed

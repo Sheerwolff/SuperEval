@@ -33,7 +33,7 @@ class Settings:
     contact_email: str = os.getenv("CONTACT_EMAIL", "sheerwolff@gmail.com")
     contact_linkedin: str = os.getenv("CONTACT_LINKEDIN", "https://www.linkedin.com/in/sheerwolff")
     contact_whatsapp: str | None = os.getenv("CONTACT_WHATSAPP") or None
-    # unlocks the owner role on the Review page (owner judgments, which also curate golden questions)
+    # unlocks the owner role on the Golden set page (owner judgments, which also curate golden questions)
     admin_key: str | None = os.getenv("ADMIN_KEY") or None
 
     @property

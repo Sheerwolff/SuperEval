@@ -96,7 +96,7 @@ class Alert(Base):
 
 
 class HumanJudgment(Base):
-    """A person's verdict on a trace (Review page). Visitors and the owner are kept apart:
+    """A person's verdict on a trace (Golden set page). Visitors and the owner are kept apart:
     owner judgments drive judge calibration and can be promoted into the golden set."""
 
     __tablename__ = "human_judgments"
@@ -158,7 +158,7 @@ class UserSpend(Base):
 
 class GoldenItem(Base):
     """One benchmark question. Drafts become CI-gating only once a human approves them
-    (curated by owner judgments of its test answers on the Review page); items can also come from traces."""
+    (curated by owner judgments of its test answers on the Golden set page); items can also come from traces."""
 
     __tablename__ = "golden_items"
 

@@ -30,7 +30,7 @@ GATES = {"overall": 0.80, "trap_unanswerable": 0.80, "trap_ambiguous": 0.75}
 
 def run_one(item: dict, version: str, live: bool, model: str | None, run_id: str | None = None) -> dict:
     """Answer and score one golden item. With `run_id`, the answer is also stored as a trace (source 'golden')
-    with a `golden_match` verdict, so it can be reviewed on the Review page."""
+    with a `golden_match` verdict, so it can be reviewed on the Golden set page."""
     sem = get_semantic()
     if live:
         from app.analyst.agent import run_analyst
@@ -182,7 +182,7 @@ def main() -> None:
         print(json.dumps(res, ensure_ascii=False, indent=2))
         sys.exit(1 if res["problems"] else 0)
     if not items:
-        print("no approved golden items (approve some on the Review page, or pass --include-drafts)", file=sys.stderr)
+        print("no approved golden items (approve some on the Golden set page, or pass --include-drafts)", file=sys.stderr)
         sys.exit(2)
     spent = [0.0]
 

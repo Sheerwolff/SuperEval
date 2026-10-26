@@ -1,6 +1,6 @@
 """Judge validation: the LLM judge's verdicts against a human-annotated gold set.
 
-Gold set = the owner's latest judgment of each answer on the Review page ("is the answer correct?" yes/no).
+Gold set = the owner's latest judgment of each answer on the Golden set page ("is the answer correct?" yes/no).
 The judge 'fails' an answer when any of its dimensions fails (grounded, method, answers the question, caveats).
 Positive class = a wrong answer, so recall is the share of human-flagged wrong answers the judge also failed.
 

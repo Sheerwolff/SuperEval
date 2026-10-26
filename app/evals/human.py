@@ -1,4 +1,4 @@
-"""The human layer: judgments on traces (Review page), the human override rate, agreement between
+"""The human layer: judgments on traces (Golden set page), the human override rate, agreement between
 humans and the automated evals, and the golden set: adding traces to it and curating it from owner judgments."""
 from __future__ import annotations
 
@@ -144,7 +144,7 @@ def judge_feedback_summary(since=None, session=None) -> dict:
 
 
 def _guess_shape(trace: Trace, tags=(), corrected_sql: str | None = None) -> tuple[str, str, dict]:
-    """(qtype, answer_type, answer_key) draft for a trace going into the golden set; the owner fixes it on Review."""
+    """(qtype, answer_type, answer_key) draft for a trace going into the golden set; the owner fixes it on the Golden set page."""
     if "should have declined" in tags:
         return "trap_unanswerable", "decline", {}
     if "ignored ambiguity" in tags:
@@ -251,7 +251,7 @@ def curate_golden(trace_id: str, correct: str, corrected_sql: str | None = None,
 
 
 def approve_into_golden(judgment_id: int) -> str:
-    """Owner's 'approve and add to the golden set' from the Review page: put the judged trace's question in the golden
+    """Owner's 'approve and add to the golden set' from the Golden set page: put the judged trace's question in the golden
     set (or reuse its item) and approve it when the reference can be trusted: the owner gave correct SQL, judged the
     agent's answer correct, or the question is about declining / stating an assumption. Otherwise it stays a draft
     until correct SQL is added. Returns what happened."""
@@ -259,7 +259,7 @@ def approve_into_golden(judgment_id: int) -> str:
         j = s.get(HumanJudgment, judgment_id)
         if j is None or j.role != "owner":
             raise ValueError("only owner judgments can approve golden questions")
-        notes = "Approved on the Review page." + (f" A good answer: {j.corrected_answer}" if j.corrected_answer else "")
+        notes = "Approved on the Golden set page." + (f" A good answer: {j.corrected_answer}" if j.corrected_answer else "")
         gid = draft_from_trace(j.trace_id, "promoted", notes, tags=j.tags or (), corrected_sql=j.corrected_sql,
                                session=s)
         g = s.get(GoldenItem, gid)
@@ -278,7 +278,7 @@ def approve_into_golden(judgment_id: int) -> str:
 
 
 def missed_failures(session=None) -> pd.DataFrame:
-    """Answers people judged wrong, unsound or corrected on Review where no automated check (Layer 1 or the judge)
+    """Answers people judged wrong, unsound or corrected on the Golden set page where no automated check (Layer 1 or the judge)
     failed: the failures the eval suite should have caught."""
     df = judgments_frame(session=session)
     bad = df[df.apply(is_override, axis=1)] if not df.empty else df

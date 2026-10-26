@@ -22,7 +22,7 @@ digraph G {
   l1    [label="Layer 1 · the analyst\\ngrounding re-execution · SQL lint\\ncanonical cross-check · declines\\n100% of traffic"];
   judge [label="LLM judge (gpt-5)\\n30% sample"];
   l2    [label="Layer 2 · the judge\\nrecall on known-bad · canaries\\nflip rate · κ vs owner · bias"];
-  hum   [label="Review page\\nhuman judgments\\n→ override rate, κ"];
+  hum   [label="Golden set page\\nhuman judgments\\n→ override rate, κ"];
   gold  [label="Golden set (80 Qs)\\nreference SQL, human-approved\\nCI gate on PRs"];
   db    [label="Postgres\\ntraces · evals · alerts"];
   mon   [label="Monitors\\nWilson SLOs · z-score · PSI\\nfreshness · budget"];

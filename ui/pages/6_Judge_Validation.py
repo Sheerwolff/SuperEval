@@ -17,9 +17,9 @@ DEFS = {
     "precision": "Of the answers the judge failed, the share a human also judged wrong. Low means false alarms.",
     "agreement": "Share of gold-set answers where the judge and the human reached the same verdict.",
     "kappa": "Agreement corrected for chance: 1 is perfect, 0 is no better than chance.",
-    "gold": "Answers the owner judged correct or wrong on the Review page (latest judgment per answer).",
+    "gold": "Answers the owner judged correct or wrong on the Golden set page (latest judgment per answer).",
     "chat": "Share of chat users who said they agree with the eval verdicts on an answer.",
-    "missed": "Answers people judged wrong on Review where no automated check (rules or judge) failed.",
+    "missed": "Answers people judged wrong on the Golden set page where no automated check (rules or judge) failed.",
     "suite_recall": "Of the answers people judged wrong, the share at least one automated rule check also failed.",
 }
 
@@ -53,7 +53,7 @@ tiles([
 st.dataframe(pd.DataFrame({"judge: failed": [m["tp"], m["fp"]], "judge: passed": [m["fn"], m["tn"]]},
                           index=["human: wrong", "human: correct"]), use_container_width=True)
 if not m["n"]:
-    st.info("No gold set to compare yet. Judge answers on the Review page as owner (correct / wrong), then calibrate.")
+    st.info("No gold set to compare yet. Judge answers on the Golden set page as owner (correct / wrong), then calibrate.")
 
 # ---- ablation ----------------------------------------------------------------------------
 st.markdown("#### Ablation: without vs with ground-truth evidence")
@@ -134,7 +134,7 @@ miss = missed_failures()
 tiles([
     ("Chat agreement rate", pct(fb["agree_rate"]), f"{fb['n']} answers rated · {fb['n_disagree']} disagreed", False,
      DEFS["chat"]),
-    ("Failures the suite missed", str(len(miss)), "judged wrong on Review, no check failed", len(miss) > 0,
+    ("Failures the suite missed", str(len(miss)), "judged wrong by people, no check failed", len(miss) > 0,
      DEFS["missed"]),
     ("Suite catches human-flagged failures", pct(agr.get("eval_recall_on_human_flags")),
      f"{agr.get('both_flag', 0)} caught · {agr.get('human_only', 0)} missed by the rule checks", False,

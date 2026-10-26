@@ -57,7 +57,7 @@ Every answer is evaluated in production in two layers:
 |---|---|---|
 | **Correctness** | Golden-set accuracy of the production prompt | Offline, CI |
 | **Grounding** | Share of answers whose every number re-checks | Online, 100% |
-| **Human override rate** | Share of human-reviewed answers judged wrong | Review page |
+| **Human override rate** | Share of human-reviewed answers judged wrong | Golden set page |
 | **Cost per completed task** | Agent + judge USD ÷ completed answers | Traces |
 
 Secondary metrics are sliced by question type and language:
@@ -71,14 +71,14 @@ Secondary metrics are sliced by question type and language:
    eval scorecard.
 2. **Test the agent.** *Agent evals* runs the live agent on the golden set (about 4 minutes, ~$0.20) and shows
    accuracy, accuracy by question type and every wrong answer, next to the Layer 1 metrics on live traffic. Every
-   answer from the run is saved as a trace (source *golden*). The golden set grows from *Review* ("Add to the
+   answer from the run is saved as a trace (source *golden*). The golden set grows from *Golden set* ("Add to the
    golden set" and owner judgments) and from every disagreement with the verdicts in *Chat*.
-3. **Investigate.** *Review* filters to a failing check or question type, showing the SQL, the result, and why the
+3. **Investigate.** *Golden set* filters to a failing check or question type, showing the SQL, the result, and why the
    lint flagged it.
 4. **Who watches the judge?** *Judge validation* compares the judge with the owner-annotated gold set (confusion
    matrix, recall first), shows how ground-truth evidence changes its verdicts, and lists the failures humans caught
    that the suite missed. The owner's **Calibrate** updates the evidence the judge is fed and re-runs the comparison.
-5. **Review.** Anyone can judge a trace on the *Review* page. Judgments are stored by role (visitor/owner), and
+5. **Golden set.** Anyone can judge a trace on the *Golden set* page. Judgments are stored by role (visitor/owner), and
    owner judgments can add an answer to the golden set. With source *golden*, the owner reviews golden-set test
    answers: agreeing with the scorer approves the question, correct SQL replaces its reference, and "bad question"
    rejects it.
@@ -92,7 +92,7 @@ A judge is a model too. Every verdict is stamped with the judge model and a rubr
 | Catches known-bad answers | Recall on answers grounding, lint or the canonical check *know* are wrong | ≥ 80% (72h, n ≥ 10) |
 | Right on known cases | 16 canary analyses (Simpson's trap, mis-copied number, wrong city, wrong denominator, invented trend, …) re-judged daily | ≥ 80% |
 | Same verdict twice | Flip rate on re-judged traces | ≤ 15% |
-| Agrees with the owner | Cohen's κ from owner judgments on the Review page | reported, alert when low |
+| Agrees with the owner | Cohen's κ from owner judgments on the Golden set page | reported, alert when low |
 | Bias | Score vs. answer length; Hebrew vs. English gap | reported |
 | Ops | Parse/API error rate | ≤ 5% |
 

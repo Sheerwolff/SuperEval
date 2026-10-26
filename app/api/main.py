@@ -244,7 +244,7 @@ def judge_calibrate(body: BenchIn, x_admin_key: str | None = Header(default=None
         raise HTTPException(429, f"You've used today's ${guard.budget:.2f} of live LLM calls.")
     n = len(judge_validation.gold_set())
     if not n:
-        raise HTTPException(400, "No owner-annotated answers yet: judge some on the Review page first.")
+        raise HTTPException(400, "No owner-annotated answers yet: judge some on the Golden set page first.")
     if not _cal_lock.acquire(blocking=False):
         raise HTTPException(409, "A calibration is already running.")
     _cal.update(running=True, done=0, total=2 * n, started_at=time.time(), last_error=None)
