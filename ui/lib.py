@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import sys
+import uuid
 from datetime import timedelta
 from html import escape
 from pathlib import Path
@@ -66,9 +67,10 @@ def setup(title: str, icon: str = "📊") -> None:
         from components import connect_compact
 
         connect_compact()
+    track_page_view(title)
 
 
-PAGES = ["", "Chat", "Price_Explorer", "Agent_Evals", "Judge_Validation", "Architecture",
+PAGES = ["", "Chat", "Price_Explorer", "Agent_Evals", "Judge_Validation", "Usage", "Architecture",
          "Golden_Set"]
 THEMES = {"☀️ Light": "Light", "🌙 Dark": "Dark", "💻 Auto": "System"}
 
@@ -116,6 +118,30 @@ def user_key() -> str:
     headers = st.context.headers or {}
     ip = str(headers.get("X-Forwarded-For") or "").split(",")[0].strip() or st.context.ip_address or "localhost"
     return hashlib.sha256(str(ip).encode()).hexdigest()[:32]
+
+
+def session_id() -> str:
+    """Random id of this browser session (a new one per page load/tab). Shared by every page, and stored on chat
+    traces, so events and traces can be joined."""
+    if "session_id" not in st.session_state:
+        st.session_state.session_id = uuid.uuid4().hex[:12]
+    return st.session_state.session_id
+
+
+def track(event: str, page: str | None = None, **props) -> None:
+    """Log one visitor event (never raises). `props` are event details, e.g. track("chat_feedback", agree=True)."""
+    from app.monitor.events import log_event
+    from components import role
+
+    log_event(event, user_key=user_key(), session_id=session_id(), page=page, role=role(), props=props)
+
+
+def track_page_view(page: str) -> None:
+    """One page_view per page per browser session (Streamlit reruns the script on every click, so dedupe)."""
+    seen = st.session_state.setdefault("_viewed_pages", set())
+    if page not in seen:
+        seen.add(page)
+        track("page_view", page=page)
 
 
 # ---- API ---------------------------------------------------------------

@@ -1,6 +1,5 @@
 import json
 import re
-import uuid
 
 import httpx
 import streamlit as st
@@ -8,13 +7,12 @@ import streamlit as st
 from app.config import settings
 from app.evals.human import save_judge_feedback
 from components import role
-from lib import eval_badges, setup, user_key
+from lib import eval_badges, session_id, setup, track, user_key
 from render import render_chart, render_queries
 
 setup("Chat with the agent", "💬")
 
-if "session_id" not in st.session_state:
-    st.session_state.session_id = uuid.uuid4().hex[:12]
+if "messages" not in st.session_state:
     st.session_state.messages = []
 
 EXAMPLES = [
@@ -40,7 +38,7 @@ def short_sql(sql: str, n: int = 70) -> str:
 
 
 def stream_chat(question: str, history: list[dict], status) -> dict | None:
-    payload = {"question": question, "session_id": st.session_state.session_id, "user_key": user_key(),
+    payload = {"question": question, "session_id": session_id(), "user_key": user_key(),
                "history": history}
     steps = 0
     try:
@@ -92,7 +90,8 @@ def judge_feedback(msg: dict, verdicts: list[dict]) -> None:
     st.markdown("**Do you agree with these verdicts?**")
     a, b = st.columns(2)
     if a.button("👍 Yes", key=f"{key}_yes", use_container_width=True):
-        save_judge_feedback(msg["id"], role(), st.session_state.session_id, agree=True)
+        save_judge_feedback(msg["id"], role(), session_id(), agree=True)
+        track("chat_feedback", page="Chat", agree=True, trace_id=msg["id"])
         st.session_state[key] = "saved"
         st.rerun()
     if b.button("👎 No", key=f"{key}_no", use_container_width=True):
@@ -103,8 +102,9 @@ def judge_feedback(msg: dict, verdicts: list[dict]) -> None:
             disputed = st.multiselect("Which verdicts look wrong?", list(labels), format_func=labels.get)
             note = st.text_input("Why? (optional)")
             if st.form_submit_button("Send feedback", type="primary"):
-                save_judge_feedback(msg["id"], role(), st.session_state.session_id, agree=False,
+                save_judge_feedback(msg["id"], role(), session_id(), agree=False,
                                     disputed=disputed, note=note)
+                track("chat_feedback", page="Chat", agree=False, trace_id=msg["id"], disputed=len(disputed))
                 st.session_state[key] = "saved"
                 st.rerun()
 
@@ -173,6 +173,8 @@ with chat_col:
         with st.chat_message("assistant"):
             status = st.status("Thinking…", expanded=True)
             res = stream_chat(prompt, history, status)
+            track("chat_question", page="Chat", trace_id=res["id"] if res else None, answered=bool(res),
+                  lang="he" if is_hebrew(prompt) else "en", suggested=bool(clicked), turn=len(history) // 2 + 1)
             if res:
                 bubble(res["answer"])
                 render_chart(res)

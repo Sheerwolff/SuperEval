@@ -159,11 +159,11 @@ Jerusalem) is committed for tests and CI, and the golden set is built from it so
 |---|---|
 | `app/analyst/` | Semantic layer (DuckDB, canonical macros), OpenAI analyst, structured answer, simulator with fault knobs, question-type classifier |
 | `app/evals/` | Online Layer 1 evals, SQL lint, gpt-5 judge, ground-truth evidence, judge validation, judge monitor (Layer 2), canaries, calibration, human judgments, golden set, scorers, benchmark |
-| `app/monitor/` | Aggregates, rules (Wilson SLOs, z-score, PSI, freshness, budget, judge rules), alert lifecycle |
+| `app/monitor/` | Aggregates, rules (Wilson SLOs, z-score, PSI, freshness, budget, judge rules), alert lifecycle, visitor event tracking (`events.py`) |
 | `app/traffic/` | Synthetic questions; 30-day backfill with six seeded incidents |
 | `app/api/` | FastAPI service (SSE chat stream, background golden-set runs, simulated bursts) and per-user cost guard |
 | `app/data/` | XML parsing, city normalization, ingest, LLM enrichment, snapshot fetch/sample |
-| `ui/` | Streamlit: chat, price explorer, review, agent evals, judge validation, architecture |
+| `ui/` | Streamlit: chat, price explorer, review, agent evals, judge validation, usage, architecture |
 
 ## Run it locally
 
@@ -210,6 +210,15 @@ Tests never touch `DATABASE_URL`: `tests/conftest.py` gives every run a throwawa
 Each user (by IP) can spend `USER_DAILY_BUDGET_USD` (default $1) of live LLM calls per UTC day, across chat and
 golden-set runs. Past it, chat switches to the simulator and says so, and golden-set runs are refused. There is no
 global ceiling. `DAILY_BUDGET_USD` only sets the threshold of the daily spend alert.
+
+## Usage tracking
+
+Every page view (once per page per browser session), chat question, verdict feedback and test run is logged to the
+`events` table with a visitor key (a SHA-256 hash of the IP; no cookies, no raw IPs) and the browser-session id, which
+chat traces also carry. The *Usage* page shows visitors, funnel, pages and returning visitors; the per-visitor table
+is owner-only, and owner activity is excluded by default. Chat events carry the `trace_id`, so what each visitor asked
+is one join away: `events.props->>'trace_id' = traces.id`. The table is created automatically on the next start.
+Tracking started when this shipped; earlier visits are not recorded. Logging never raises, so analytics cannot break the app.
 
 ## Known limitations
 

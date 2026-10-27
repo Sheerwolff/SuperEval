@@ -6,7 +6,7 @@ from app.config import settings
 from app.evals.human import agreement, judge_feedback_summary, judgments_frame, missed_failures
 from app.evals.judge_validation import gold_set, latest_calibration, production_matrix
 from components import owner_unlock, role
-from lib import api, setup, tiles, user_key
+from lib import api, setup, tiles, track, user_key
 
 setup("Judge validation", "⚖️")
 st.markdown("## ⚖️ Judge Validation")
@@ -107,6 +107,7 @@ if is_owner:
             st.error(str(r.json().get("detail", r.text)).replace("$", "\\$"))
         else:
             st.session_state.cal_was_running = True
+            track("calibrate_run", page="Judge validation")
             st.rerun()
 else:
     st.caption("Only the owner can calibrate the judge.")

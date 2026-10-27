@@ -220,6 +220,23 @@ class IngestRun(Base):
     fetched_at: Mapped[str | None] = mapped_column(String(32))
 
 
+class Event(Base):
+    """One thing a visitor did: opened a page, asked a question, gave feedback, ran a test. Visitors are identified
+    only by `user_key` (a hash of the IP, see ui/lib.py) and a per-browser-session `session_id`; no cookies, no
+    raw IPs. `props` carries event-specific details (e.g. the trace id of a chat question)."""
+
+    __tablename__ = "events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+    event: Mapped[str] = mapped_column(String(32), index=True)  # page_view | chat_question | chat_feedback | ...
+    user_key: Mapped[str | None] = mapped_column(String(64), index=True)
+    session_id: Mapped[str | None] = mapped_column(String(64), index=True)
+    page: Mapped[str | None] = mapped_column(String(48))
+    role: Mapped[str] = mapped_column(String(8), default="visitor")  # visitor | owner (owner = admin key entered)
+    props: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
 def _engine():
     url = settings.database_url
     if url.startswith("postgres://"):

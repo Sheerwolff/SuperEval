@@ -10,7 +10,7 @@ from app.db import Alert, GoldenItem, SessionLocal, utcnow
 from app.evals.bench import latest_run
 from app.evals.human import judgments_frame, override_rate
 from app.monitor.aggregates import metric_value
-from lib import SEVERITY, api, fmt, frames, setup, tiles, user_key
+from lib import SEVERITY, api, fmt, frames, setup, tiles, track, user_key
 
 setup("Agent evals", "📈")
 st.markdown("## 📈 Agent Evals")
@@ -72,6 +72,7 @@ with st.container(border=True):
                 st.error(str(r.json().get("detail", r.text)).replace("$", "\\$"))
             else:
                 st.session_state.bench_was_running = True
+                track("bench_run", page="Agent evals")
                 st.rerun()
         except httpx.HTTPError as exc:
             st.error(f"API error: {exc}")
