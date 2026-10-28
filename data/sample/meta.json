@@ -1,17 +1,17 @@
 {
-  "fetched_at": "2026-10-25T10:37:38+00:00",
+  "fetched_at": "2026-10-28T11:21:52+00:00",
   "chains": {
     "Shufersal": {
       "ok": true,
-      "stores_total": 416,
-      "stores_missing_city_field": 6,
-      "stores_city_unresolved": 2,
+      "stores_total": 418,
+      "stores_missing_city_field": 7,
+      "stores_city_unresolved": 3,
       "stores_selected": 6,
-      "price_rows_raw": 314139,
-      "price_files": 48,
-      "published_at": "2026-10-25T01:31",
-      "price_rows": 9043,
-      "latest_price_update": "2026-10-23T14:15:00"
+      "price_rows_raw": 236950,
+      "price_files": 34,
+      "published_at": "2026-10-28T01:40",
+      "price_rows": 8801,
+      "latest_price_update": "2026-10-27T12:53:00"
     },
     "Rami Levy": {
       "ok": true,
@@ -19,23 +19,18 @@
       "stores_missing_city_field": 3,
       "stores_city_unresolved": 2,
       "stores_selected": 6,
-      "price_rows_raw": 1378571,
-      "price_files": 136,
-      "published_at": "2026-10-25T10:30",
-      "price_rows": 10751,
-      "latest_price_update": "2026-10-25T11:54:04.000"
+      "price_rows_raw": 931918,
+      "price_files": 91,
+      "published_at": "2026-10-28T11:11",
+      "price_rows": 10608,
+      "latest_price_update": "2026-10-28T11:51:35.000"
     },
     "Victory": {
-      "ok": true,
-      "stores_total": 70,
-      "stores_missing_city_field": 6,
-      "stores_city_unresolved": 5,
-      "stores_selected": 4,
-      "price_rows_raw": 281109,
-      "price_files": 32,
-      "published_at": "2026-10-25T07:07",
-      "price_rows": 6560,
-      "latest_price_update": "2026-10-23T11:26:27.000"
+      "ok": false,
+      "error": "store list: no Stores file published",
+      "price_rows": 0,
+      "latest_price_update": null,
+      "stores_selected": 0
     },
     "Yohananof": {
       "ok": true,
@@ -43,11 +38,11 @@
       "stores_missing_city_field": 51,
       "stores_city_unresolved": 10,
       "stores_selected": 3,
-      "price_rows_raw": 250067,
-      "price_files": 24,
-      "published_at": "2026-10-24T21:40",
-      "price_rows": 5706,
-      "latest_price_update": "2026-10-22T11:46:00"
+      "price_rows_raw": 215377,
+      "price_files": 20,
+      "published_at": "2026-10-27T22:40",
+      "price_rows": 5642,
+      "latest_price_update": "2026-10-27T10:34:00"
     },
     "Osher Ad": {
       "ok": true,
@@ -55,11 +50,11 @@
       "stores_missing_city_field": 0,
       "stores_city_unresolved": 0,
       "stores_selected": 4,
-      "price_rows_raw": 179376,
-      "price_files": 28,
-      "published_at": "2026-10-25T09:15",
-      "price_rows": 6284,
-      "latest_price_update": "2026-10-25T10:42:26.000"
+      "price_rows_raw": 165009,
+      "price_files": 26,
+      "published_at": "2026-10-28T09:15",
+      "price_rows": 6143,
+      "latest_price_update": "2026-10-28T10:25:53.000"
     },
     "Tiv Taam": {
       "ok": true,
@@ -67,11 +62,11 @@
       "stores_missing_city_field": 0,
       "stores_city_unresolved": 0,
       "stores_selected": 4,
-      "price_rows_raw": 350520,
-      "price_files": 24,
-      "published_at": "2026-10-24T21:40",
-      "price_rows": 7079,
-      "latest_price_update": "2026-10-24T15:56:00"
+      "price_rows_raw": 600141,
+      "price_files": 38,
+      "published_at": "2026-10-28T11:11",
+      "price_rows": 6987,
+      "latest_price_update": "2026-10-28T12:05:00"
     },
     "Yellow": {
       "ok": true,
@@ -79,23 +74,18 @@
       "stores_missing_city_field": 1,
       "stores_city_unresolved": 1,
       "stores_selected": 6,
-      "price_rows_raw": 146890,
-      "price_files": 89,
-      "published_at": "2026-10-24T22:00",
-      "price_rows": 2331,
+      "price_rows_raw": 54498,
+      "price_files": 32,
+      "published_at": "2026-10-27T22:35",
+      "price_rows": 2380,
       "latest_price_update": "2026-10-14T00:03:05.000"
     },
     "Hazi Hinam": {
-      "ok": true,
-      "stores_total": 13,
-      "stores_missing_city_field": 1,
-      "stores_city_unresolved": 1,
-      "stores_selected": 0,
-      "price_rows_raw": 202980,
-      "price_files": 16,
-      "published_at": "2026-10-24T22:02",
+      "ok": false,
+      "error": "store list: no Stores file published",
       "price_rows": 0,
-      "latest_price_update": "2026-10-22T16:09:25.000"
+      "latest_price_update": null,
+      "stores_selected": 0
     }
   },
   "cities": [
@@ -104,7 +94,7 @@
     "Jerusalem"
   ],
   "n_products": 2000,
-  "n_prices": 47754,
-  "n_promos": 60612,
+  "n_prices": 40561,
+  "n_promos": 29274,
   "sample": true
 }
