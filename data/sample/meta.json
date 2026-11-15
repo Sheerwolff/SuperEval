@@ -1,5 +1,5 @@
 {
-  "fetched_at": "2026-11-14T12:12:40+00:00",
+  "fetched_at": "2026-11-15T12:44:54+00:00",
   "chains": {
     "Shufersal": {
       "ok": true,
@@ -7,10 +7,10 @@
       "stores_missing_city_field": 7,
       "stores_city_unresolved": 3,
       "stores_selected": 6,
-      "price_rows_raw": 237677,
+      "price_rows_raw": 237350,
       "price_files": 34,
-      "published_at": "2026-11-14T01:40",
-      "price_rows": 8791,
+      "published_at": "2026-11-15T01:40",
+      "price_rows": 8850,
       "latest_price_update": "2026-11-13T10:56:00"
     },
     "Rami Levy": {
@@ -18,12 +18,12 @@
       "stores_total": 99,
       "stores_missing_city_field": 3,
       "stores_city_unresolved": 2,
-      "stores_selected": 5,
-      "price_rows_raw": 906064,
-      "price_files": 88,
-      "published_at": "2026-11-14T12:11",
-      "price_rows": 8763,
-      "latest_price_update": "2026-11-13T10:06:53.000"
+      "stores_selected": 6,
+      "price_rows_raw": 927767,
+      "price_files": 90,
+      "published_at": "2026-11-15T12:11",
+      "price_rows": 10638,
+      "latest_price_update": "2026-11-15T11:53:58.000"
     },
     "Victory": {
       "ok": false,
@@ -38,10 +38,10 @@
       "stores_missing_city_field": 51,
       "stores_city_unresolved": 10,
       "stores_selected": 3,
-      "price_rows_raw": 215284,
+      "price_rows_raw": 214909,
       "price_files": 20,
-      "published_at": "2026-11-13T22:40",
-      "price_rows": 5638,
+      "published_at": "2026-11-14T22:40",
+      "price_rows": 5629,
       "latest_price_update": "2026-11-13T12:12:00"
     },
     "Osher Ad": {
@@ -50,11 +50,11 @@
       "stores_missing_city_field": 0,
       "stores_city_unresolved": 0,
       "stores_selected": 4,
-      "price_rows_raw": 236818,
-      "price_files": 38,
-      "published_at": "2026-11-14T12:15",
-      "price_rows": 6219,
-      "latest_price_update": "2026-11-13T10:58:54.000"
+      "price_rows_raw": 242192,
+      "price_files": 39,
+      "published_at": "2026-11-15T12:15",
+      "price_rows": 6170,
+      "latest_price_update": "2026-11-15T12:06:42.000"
     },
     "Tiv Taam": {
       "ok": true,
@@ -62,11 +62,11 @@
       "stores_missing_city_field": 0,
       "stores_city_unresolved": 0,
       "stores_selected": 4,
-      "price_rows_raw": 317589,
+      "price_rows_raw": 317347,
       "price_files": 21,
-      "published_at": "2026-11-13T22:40",
-      "price_rows": 7002,
-      "latest_price_update": "2026-11-13T09:33:00"
+      "published_at": "2026-11-14T22:40",
+      "price_rows": 7000,
+      "latest_price_update": "2026-11-14T08:32:00"
     },
     "Yellow": {
       "ok": true,
@@ -74,10 +74,10 @@
       "stores_missing_city_field": 1,
       "stores_city_unresolved": 1,
       "stores_selected": 6,
-      "price_rows_raw": 54434,
+      "price_rows_raw": 54422,
       "price_files": 32,
-      "published_at": "2026-11-13T22:35",
-      "price_rows": 2417,
+      "published_at": "2026-11-14T22:35",
+      "price_rows": 2409,
       "latest_price_update": "2026-11-05T00:03:02.000"
     },
     "Hazi Hinam": {
@@ -94,7 +94,7 @@
     "Jerusalem"
   ],
   "n_products": 2000,
-  "n_prices": 38830,
-  "n_promos": 25535,
+  "n_prices": 40696,
+  "n_promos": 26461,
   "sample": true
 }
